@@ -133,12 +133,14 @@ export async function openPage(cdp, url, { width, height, actions = [] }) {
 }
 
 /** Query string for the preview harness (scripts/preview-server.mjs). */
-export function harnessQuery({ view = 'main', theme = 'light', seed = {}, dockWidth }) {
+export function harnessQuery({ view = 'main', theme = 'light', seed = {}, dockWidth, session }) {
   return new URLSearchParams({
     view,
     theme,
     reset: '1',
     seed: JSON.stringify(seed),
     ...(dockWidth ? { dockWidth: String(dockWidth) } : {}),
+    // How the stand-in session service behaves (see the harness in preview-server.mjs).
+    ...(session ? { session } : {}),
   }).toString();
 }

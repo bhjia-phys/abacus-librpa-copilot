@@ -25,6 +25,9 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseLibrpaBand } from './librpa/bands.js';
+import { cumulativePathLength } from './bands.js';
+import { describeChannel } from './kconvergence.js';
 
 /** Refuse anything that is not the known Hugging Face host, so a record cannot redirect us. */
 const ALLOWED_HOSTS = new Set([
@@ -115,7 +118,8 @@ export async function fetchAsset(options) {
     return {
       ok: true,
       bytes: buffer,
-      contentType: response.headers.get('content-type') || guessType(url),
+      // The extension decides for known kinds, so a fresh fetch and a cache hit agree.
+      contentType: KIND_TYPES[assetKind(url)] || response.headers.get('content-type') || guessType(url),
       cached: false,
       url,
       error: '',
@@ -128,14 +132,77 @@ export async function fetchAsset(options) {
   }
 }
 
-/** Guess a content type from the extension; the upstream header is preferred when present. */
+/** Content types for the kinds a record holds; `assetKind` names them. */
+const KIND_TYPES = {
+  svg: 'image/svg+xml',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  pdf: 'application/pdf',
+  json: 'application/json; charset=utf-8',
+  dat: 'text/plain; charset=utf-8',
+  text: 'text/plain; charset=utf-8',
+};
+
+/**
+ * What an asset is, from the extension of its URL path (the record's `path` as fallback).
+ *
+ * The record's `label` is a caption ("GW occupation-separated frontier"), not a file name,
+ * so it says nothing about the format. The panel used to test the label for `.png` and
+ * therefore never showed the 214 SVG figures.
+ *
+ * @param {string|null} url
+ * @param {string|null} [path]
+ * @returns {'svg'|'png'|'jpg'|'pdf'|'json'|'dat'|'text'|'other'}
+ */
+export function assetKind(url, path) {
+  const ext = (value) => {
+    if (typeof value !== 'string' || value === '') return '';
+    let pathname = value;
+    try {
+      pathname = new URL(value).pathname;
+    } catch {
+      /* a repository path, not a URL */
+    }
+    const m = /\.([a-z0-9]+)$/i.exec(pathname);
+    return m ? m[1].toLowerCase() : '';
+  };
+  const found = ext(url) || ext(path);
+  if (found === 'jpeg') return 'jpg';
+  if (found === 'txt' || found === 'out' || found === 'log') return 'text';
+  return Object.hasOwn(KIND_TYPES, found) ? found : 'other';
+}
+
+/**
+ * The content type a kind is served as. For a known kind the extension decides, not the
+ * upstream header: the mirror sends JSON as text/plain, and a cache hit has no header at
+ * all — an SVG that came back as application/octet-stream would not render in an <img>.
+ */
 function guessType(url) {
-  const clean = String(url).split('?')[0].toLowerCase();
-  if (clean.endsWith('.png')) return 'image/png';
-  if (clean.endsWith('.pdf')) return 'application/pdf';
-  if (clean.endsWith('.json')) return 'application/json';
-  if (clean.endsWith('.dat') || clean.endsWith('.txt')) return 'text/plain; charset=utf-8';
-  return 'application/octet-stream';
+  return KIND_TYPES[assetKind(url)] || 'application/octet-stream';
+}
+
+/** Filename tokens that name a quantity of the KS → EXX → GW chain. */
+const QUANTITY_TOKENS = { ks: 'KS', exx: 'EXX', gw: 'GW', g0w0: 'GW', gw0: 'GW', evgw: 'GW', qsgw: 'QSGW' };
+const QUANTITY_ORDER = ['KS', 'EXX', 'GW', 'QSGW'];
+
+/**
+ * Which quantity a figure or band file shows, read from its caption and file name.
+ *
+ * Words are split on everything that is not a letter or digit, underscores included, so
+ * `cuinp2se6_ks.png` reads as KS. The record's directory is not consulted: every path of a
+ * GW record contains "-gw", which would label its KS figure GW.
+ *
+ * @param {string|null} label
+ * @param {string|null} path
+ * @returns {{ quantity: 'KS'|'EXX'|'GW'|'QSGW'|'compare'|'other', quantities: string[] }}
+ */
+export function assetQuantity(label, path) {
+  const fileName = typeof path === 'string' ? path.split('/').pop() : '';
+  const tokens = `${label ?? ''} ${fileName}`.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const found = new Set(tokens.map((t) => QUANTITY_TOKENS[t]).filter(Boolean));
+  const quantities = QUANTITY_ORDER.filter((q) => found.has(q));
+  if (quantities.length === 0) return { quantity: 'other', quantities };
+  return { quantity: quantities.length === 1 ? quantities[0] : 'compare', quantities };
 }
 
 /** Keep the cache bounded by dropping the oldest objects first. */
@@ -169,48 +236,117 @@ function pruneCache(cacheDir) {
 /**
  * A record's viewable assets, grouped so the panel can offer them without decoding `files`.
  *
+ * Every item carries `kind` (from the URL's extension; see `assetKind`), `quantity` (from
+ * its caption and file name; see `assetQuantity`) and `stem` (the file name without its
+ * extension, so a PNG and the PDF of the same plot can be paired).
+ *
+ * - `figures`: plots — SVG, PNG, JPG, and PDF renderings of them.
+ * - `audits`: JSON filed under figures (display mappings, raw audits, provenance). They
+ *   document a plot; they are not one, so they are not offered as peers of the plots.
+ * - `bandData`: band tables (`.dat` whose name carries KS/EXX/GW/QSGW), e.g. NiO's
+ *   `GW_band_spin_1.dat` or CuInP2Se6's `GW_bands.dat` captioned `cuinp2se6_GW.dat`.
+ *
  * @param {object} record a full `record.json`
- * @returns {{ figures:Array, bandData:Array, inputs:Array, logs:Array, results:Array }}
+ * @returns {{ figures:Array, audits:Array, bandData:Array, inputs:Array, logs:Array, results:Array }}
  */
 export function listAssets(record) {
-  const groups = { figures: [], bandData: [], inputs: [], logs: [], results: [] };
+  const groups = { figures: [], audits: [], bandData: [], inputs: [], logs: [], results: [] };
   for (const [role, entries] of Object.entries(record?.files ?? {})) {
     for (const entry of entries ?? []) {
       const url = validateAssetUrl(entry.external_url) ?? validateAssetUrl(entry.external_url_backup);
       const label = entry.label || entry.original_name || (entry.path ? entry.path.split('/').pop() : 'file');
+      const kind = assetKind(entry.external_url ?? null, entry.path ?? null);
+      const { quantity, quantities } = assetQuantity(label, entry.path ?? null);
+      const fileName = typeof entry.path === 'string' ? entry.path.split('/').pop() : '';
+      const spin = /(?:^|[^a-z])spin_?(\d+)/i.exec(`${fileName} ${label}`);
       const item = {
         label,
         role,
         url,
+        kind,
+        quantity,
+        quantities,
+        stem: fileName.replace(/\.[a-z0-9]+$/i, '') || null,
+        spin: spin ? Number(spin[1]) : null,
+        primary: entry.display_priority === 'primary',
         sizeBytes: typeof entry.size_bytes === 'number' ? entry.size_bytes : null,
         path: entry.path ?? null,
         sha256: entry.sha256 ?? null,
       };
-      // Band curves are the point of the database for this panel; surface them separately
-      // from generic "results" so the panel can plot them directly.
-      if (/_(KS|EXX|GW|QSGW)\.dat$/i.test(label)) groups.bandData.push(item);
+      // Band curves are surfaced apart from generic results so the panel can plot them.
+      if (kind === 'dat' && quantity !== 'other' && quantity !== 'compare') groups.bandData.push(item);
+      else if (role === 'figures' && kind === 'json') groups.audits.push(item);
       else if (role === 'figures') groups.figures.push(item);
       else if (role === 'inputs') groups.inputs.push(item);
       else if (role === 'logs') groups.logs.push(item);
       else groups.results.push(item);
     }
   }
-  // PNG before PDF: a panel shows the raster; the PDF is for the paper.
-  groups.figures.sort((a, b) => {
-    const rank = (x) => (/\.png$/i.test(x.label) ? 0 : /\.pdf$/i.test(x.label) ? 1 : 2);
-    return rank(a) - rank(b) || a.label.localeCompare(b.label);
-  });
-  groups.bandData.sort((a, b) => {
-    // KS, EXX, GW order is the physics order of the pipeline.
-    const rank = (x) => {
-      if (/_KS\.dat$/i.test(x.label)) return 0;
-      if (/_EXX\.dat$/i.test(x.label)) return 1;
-      if (/_GW\.dat$/i.test(x.label)) return 2;
-      return 3;
-    };
-    return rank(a) - rank(b) || a.label.localeCompare(b.label);
-  });
+  // Physics order (KS → EXX → GW → QSGW → comparisons → the rest), then images before PDFs.
+  const quantityRank = (x) => {
+    const at = [...QUANTITY_ORDER, 'compare'].indexOf(x.quantity);
+    return at < 0 ? QUANTITY_ORDER.length + 1 : at;
+  };
+  const kindRank = (x) => ({ svg: 0, png: 1, jpg: 2, pdf: 3 })[x.kind] ?? 4;
+  groups.figures.sort((a, b) => quantityRank(a) - quantityRank(b) || kindRank(a) - kindRank(b) || a.label.localeCompare(b.label));
+  groups.bandData.sort((a, b) => quantityRank(a) - quantityRank(b) || (a.spin ?? 0) - (b.spin ?? 0) || a.label.localeCompare(b.label));
   return groups;
+}
+
+/**
+ * A published band table as a channel, built exactly the way a local LibRPA band file is.
+ *
+ * The database's band tables are LibRPA's own format (`ik kx ky kz` then `occupation
+ * energy` pairs: NiO's `GW_band_spin_1.dat`, CuInP2Se6's `GW_bands.dat`). So the same parser
+ * (`parseLibrpaBand`), the same path length (`cumulativePathLength` over the file's k
+ * coordinates) and the same occupation-based band edges (`describeChannel`) apply. Whether
+ * it may share an axis with a local channel is then the panel's ordinary alignment check —
+ * nothing here resamples or shifts anything.
+ *
+ * @param {string} text the file's contents
+ * @param {{ label:string, quantity:string, spin:number|null, path:string|null }} item from `listAssets(record).bandData`
+ * @returns {{ ok:boolean, error:string, file:string, kind:string, spin:number, nKpoint:number, nBand:number,
+ *             kpath:number[], energies:number[][], vbmEv:number|null, cbmEv:number|null, gapEv:number|null,
+ *             invertedKpoints:number, minEnergyEv:number|null, maxEnergyEv:number|null, warnings:string[] }}
+ */
+export function publishedBandChannel(text, item) {
+  const file = (item.path || item.label || '').split('/').pop();
+  const parsed = parseLibrpaBand(text, { fileName: file });
+  const base = { file, kind: item.quantity, spin: item.spin ?? 1, warnings: parsed.warnings };
+  if (parsed.rows.length === 0) {
+    return { ok: false, error: '文件里没有可识别的 LibRPA 能带行（ik kx ky kz，然后是占据数/能量对）', ...base };
+  }
+  const kpath = cumulativePathLength(parsed.rows.map((r) => r.k));
+  const energies = parsed.rows.map((r) => r.energiesEv);
+  const summary = describeChannel({
+    label: item.label,
+    kind: item.quantity,
+    spin: item.spin ?? 1,
+    nKpoint: parsed.nKpoint,
+    nBand: parsed.nState,
+    kpath,
+    energies,
+    occupations: parsed.rows.map((r) => r.occupations),
+    minEnergyEv: parsed.minEnergyEv,
+    maxEnergyEv: parsed.maxEnergyEv,
+  });
+  // Same transport rounding as `compactBands`: three decimals of an eV / of a path length.
+  const round = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null);
+  return {
+    ok: true,
+    error: '',
+    ...base,
+    nKpoint: parsed.nKpoint,
+    nBand: parsed.nState,
+    kpath: kpath.map(round),
+    energies: energies.map((row) => row.map(round)),
+    vbmEv: summary.vbmEv,
+    cbmEv: summary.cbmEv,
+    gapEv: summary.gapEv,
+    invertedKpoints: summary.invertedKpoints,
+    minEnergyEv: summary.minEnergyEv,
+    maxEnergyEv: summary.maxEnergyEv,
+  };
 }
 
 /**

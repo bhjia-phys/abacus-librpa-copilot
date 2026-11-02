@@ -64,23 +64,30 @@ if (!info.ok) {
   process.exit(1);
 }
 console.log(`record ${info.id} (${info.formula})`);
-console.log(`  figures : ${info.figures.map((f) => f.label).join(', ') || '—'}`);
+console.log(`  figures : ${info.figures.map((f) => `${f.kind}:${f.quantity} ${f.label}`).join(' | ') || '—'}`);
+console.log(`  audits  : ${(info.audits || []).map((f) => f.label).join(' | ') || '—'}`);
 console.log(`  bandData: ${info.bandData.map((f) => f.label).join(', ') || '—'}`);
 
-const png = info.figures.find((f) => /\.png$/i.test(f.label));
-if (!png) {
-  console.log('no PNG figure in this record; nothing to fetch');
+// The kind comes from the URL (the label is a caption); SVG and PNG are both shown inline.
+const figure = info.figures.find((f) => (f.kind === 'png' || f.kind === 'svg') && f.url);
+if (!figure) {
+  console.log('no SVG/PNG figure in this record; nothing to fetch');
   process.exit(0);
 }
+const wantType = figure.kind === 'svg' ? 'image/svg+xml' : 'image/png';
+const looksRight = (body) => (figure.kind === 'svg'
+  ? /^\s*(<\?xml|<svg)/.test(body.subarray(0, 200).toString('utf8'))
+  : body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47);
 
-const first = await call('/abacusflow/api/library/asset', `/abacusflow/api/library/asset?url=${encodeURIComponent(png.url)}`);
-const signature = first.body.subarray(0, 8);
-const isPng = signature[0] === 0x89 && signature[1] === 0x50 && signature[2] === 0x4e && signature[3] === 0x47;
-console.log(`  fetch #1: ${first.code} ${first.headers['content-type']} ${first.body.length}B cached=${first.headers['x-abacusflow-cached']} png=${isPng}`);
+const first = await call('/abacusflow/api/library/asset', `/abacusflow/api/library/asset?url=${encodeURIComponent(figure.url)}`);
+console.log(`  fetch #1: ${first.code} ${first.headers['content-type']} ${first.body.length}B cached=${first.headers['x-abacusflow-cached']} ${figure.kind}=${looksRight(first.body)}`);
 
-const second = await call('/abacusflow/api/library/asset', `/abacusflow/api/library/asset?url=${encodeURIComponent(png.url)}`);
-console.log(`  fetch #2: ${second.code} ${second.body.length}B cached=${second.headers['x-abacusflow-cached']}`);
+// The second fetch is a cache hit; it must carry the same content type (an SVG once came back
+// as application/octet-stream here, which an <img> refuses).
+const second = await call('/abacusflow/api/library/asset', `/abacusflow/api/library/asset?url=${encodeURIComponent(figure.url)}`);
+console.log(`  fetch #2: ${second.code} ${second.headers['content-type']} ${second.body.length}B cached=${second.headers['x-abacusflow-cached']}`);
 
-const ok = first.code === 200 && isPng && second.headers['x-abacusflow-cached'] === '1';
+const ok = first.code === 200 && looksRight(first.body) && second.headers['x-abacusflow-cached'] === '1'
+  && first.headers['content-type'] === wantType && second.headers['content-type'] === wantType;
 console.log(ok ? '\nOK: figure served and cached' : '\nFAIL: unexpected result');
 process.exit(ok ? 0 : 1);

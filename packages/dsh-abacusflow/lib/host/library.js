@@ -309,10 +309,26 @@ export function summarizeRecord(record) {
       element: s.element ?? null,
       pp: s.asset_aliases?.pp ?? null,
       nao: s.asset_aliases?.nao ?? null,
+      abf: s.asset_aliases?.abf ?? null,
     })),
     abacusCommit: record.software?.abacus?.abbreviated_commit ?? null,
     librpaCommit: record.software?.librpa?.abbreviated_commit ?? null,
     path: record._path ?? null,
+    // What a published-vs-local comparison can check, each as the record states it. A
+    // field the record does not carry stays null; nothing is inferred to fill it.
+    gapDefinition: summary.gap_definition ?? null,
+    frontend: record.workflow?.frontend ?? null,
+    workflowTask: record.workflow?.task ?? null,
+    software: Object.entries(record.software ?? {}).map(([name, sw]) => ({
+      name,
+      commit: sw?.abbreviated_commit ?? (typeof sw?.commit === 'string' ? sw.commit.slice(0, 9) : null),
+      missing: sw?.missing_reason ?? null,
+    })),
+    atomCount: numberOrNull(record.computational_scale?.atom_count),
+    pathKpoints: numberOrNull(record.computational_scale?.n_path_kpoints),
+    gapProperties: (record.properties ?? [])
+      .filter((p) => p && p.key === 'band_gap' && typeof p.value === 'number')
+      .map((p) => ({ method: p.method ?? null, label: p.label ?? null, valueEv: p.value, definition: p.definition ?? null, summaryKey: p.source_summary_key ?? null })),
   };
 }
 

@@ -778,3 +778,18 @@ export function classifyAbacusRun(input) {
 
   return { code, label: STATUS_LABELS[code] ?? '未知', reason, evidence };
 }
+
+/**
+ * The markers this classifier decides on, for the per-stage diagnosis (lib/host/diagnose.js),
+ * which quotes the lines that matched them with their line numbers. Read-only views of the
+ * constants above, so the diagnosis can never disagree with the classifier about a pattern.
+ */
+export const ABACUS_LOG_MARKERS = Object.freeze({
+  fatal: Object.freeze(FATAL_SIGNATURES.map((sig) => Object.freeze({ ...sig }))),
+  notice: RE_NOTICE,
+  scfConverged: RE_SCF_CONVERGED,
+  scfNotConverged: RE_SCF_NOT_CONVERGED,
+  exxNotConverged: RE_EXX_NOT_CONVERGED,
+  relaxConvergedScfNot: RE_RELAX_CONVERGED_SCF_NOT,
+  totalTime: RE_TOTAL_TIME,
+});

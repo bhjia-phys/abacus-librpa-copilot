@@ -1,4 +1,4 @@
-/* global window, document, localStorage, fetch, ResizeObserver, console, navigator, HTMLTextAreaElement, Event */
+/* global window, document, localStorage, fetch, ResizeObserver, console, navigator */
 /**
  * dsh-abacusflow — browser half.
  *
@@ -19,8 +19,9 @@
  *   main                     the full page
  *   sidebar.right.pane.tab   the right dock (needs the sidebarRightTabs service)
  *
- * Host data service: /abacusflow/api/{ping,scan,task-bundle,bands,file,file-size,
- * library/search,library/match,kstudy,kcompare,research-context}
+ * Host data service: /abacusflow/api/{ping,scan,task-bundle,bands,file,file-size,diagnose,
+ * library/search,library/match,library/assets,library/asset,library/band,kstudy,kcompare,
+ * research-context}
  */
 window.__ModuleLoader__.load({
   id: '@local/abacusflow',
@@ -99,6 +100,9 @@ window.__ModuleLoader__.load({
         --af-c-ks: color-mix(in srgb, var(--af-accent) 55%, var(--af-bg));
         --af-c-exx: color-mix(in srgb, var(--af-accent) 50%, var(--af-err));
         --af-c-qsgw: var(--af-accent);
+
+        /* published figures are white documents in either theme */
+        --af-paper: var(--dsw-static-neutral-bluish-00, #ffffff);
 
         --af-font: var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
         --af-mono: var(--ds-font-family-code, var(--dsh-font-family-code-default, ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace));
@@ -393,21 +397,84 @@ window.__ModuleLoader__.load({
       .af-section-actions { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: var(--af-s2); }
       /* A collapsible header reads as a control: pointer, hover tint, focus ring. */
       .af-section-head-btn { cursor: pointer; border-radius: var(--af-r2); padding: 3px 4px; margin-left: -4px; }
-      .af-section-head-btn:hover { background: var(--af-bg-hover, rgba(127,127,127,.08)); }
-      .af-section-head-btn:focus-visible { outline: 2px solid var(--af-brand); outline-offset: 1px; }
+      .af-section-head-btn:hover { background: var(--af-hover); }
+      .af-section-head-btn:focus-visible { outline: 2px solid var(--af-accent); outline-offset: 1px; }
       .af-section-head-btn .af-section-title { user-select: none; }
 
-      /* ---- database assets (figures + curves fetched on demand) ---- */
-      .af-lib-assets { display: flex; flex-direction: column; gap: var(--af-s4); margin-top: var(--af-s3); }
+      /* ---- database assets: figures by quantity, audits apart, band tables ---- */
+      .af-lib-assets { display: flex; flex-direction: column; gap: var(--af-s4); margin-top: var(--af-s3); min-width: 0; }
       .af-lib-assets-head {
         display: flex; align-items: center; gap: var(--af-s2); flex-wrap: wrap;
         font: var(--af-t-caption); color: var(--af-fg-3); margin-bottom: var(--af-s2);
       }
-      .af-seg { display: flex; gap: 4px; margin-left: auto; }
-      .af-lib-img {
-        display: block; max-width: 100%; height: auto; border: 1px solid var(--af-border);
-        border-radius: var(--af-r2); background: #fff;
+      .af-lib-assets-head .af-seg { margin-left: auto; }
+      .af-lib-figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: var(--af-s3); }
+      .af-lib-figs[data-single] { grid-template-columns: minmax(0, 760px); }
+      .af-lib-fig { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      /* Published figures are drawn on white; they keep their paper in both themes. */
+      .af-lib-frame {
+        display: flex; align-items: center; justify-content: center; min-height: 120px;
+        border: 1px solid var(--af-line); border-radius: var(--af-r2); background: var(--af-paper); overflow: hidden;
       }
+      .af-lib-img { display: block; width: 100%; height: auto; }
+      .af-lib-frame[data-placeholder] { background: var(--af-fill); color: var(--af-fg-3); font: var(--af-t-caption); padding: var(--af-s4); text-align: center; }
+      .af-lib-cap { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px var(--af-s2); font: var(--af-t-caption); color: var(--af-fg-2); min-width: 0; }
+      .af-lib-cap-text { flex: 1 1 200px; min-width: 0; color: var(--af-fg); }
+      .af-kind { font: var(--af-t-micro); color: var(--af-fg-3); letter-spacing: .03em; }
+      .af-ext { color: var(--af-accent); text-decoration: none; white-space: nowrap; }
+      .af-ext:hover { text-decoration: underline; }
+      .af-lib-rows { display: flex; flex-direction: column; }
+      .af-lib-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px var(--af-s2); padding: 6px 0; border-top: 1px solid var(--af-line-soft); font: var(--af-t-caption); min-width: 0; }
+      .af-lib-row-label { flex: 1 1 220px; min-width: 0; color: var(--af-fg); overflow-wrap: anywhere; }
+      /* Flex items default to min-width: auto; a long JSON value would widen the page. */
+      .af-lib-row > * { min-width: 0; max-width: 100%; }
+
+      /* ---- stage diagnosis: verdict, quoted lines, asked vs found ---- */
+      .af-verdict {
+        display: flex; align-items: center; flex-wrap: wrap; gap: var(--af-s2); margin-top: var(--af-s4);
+        padding: var(--af-s3); border-radius: var(--af-r2); background: var(--af-fill); font: var(--af-t-section);
+      }
+      .af-verdict[data-tone="err"] { background: var(--af-err-soft); }
+      .af-verdict[data-tone="warn"] { background: var(--af-warn-soft); }
+      .af-verdict[data-tone="ok"] { background: var(--af-ok-soft); }
+      .af-verdict-text { flex: 1 1 260px; min-width: 0; }
+      .af-diag-lines { display: flex; flex-direction: column; gap: var(--af-s3); }
+      .af-diag-line { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-left: var(--af-s3); border-left: 2px solid var(--af-line-strong); }
+      .af-diag-line[data-kind="fatal"] { border-left-color: var(--af-err); }
+      .af-diag-line[data-kind="verdict"] { border-left-color: var(--af-accent); }
+      .af-diag-line[data-kind="end"] { border-left-color: var(--af-ok); }
+      .af-diag-line[data-kind="last"], .af-diag-line[data-kind="warning"], .af-diag-line[data-kind="stderr"] { border-left-color: var(--af-warn); }
+      .af-diag-where { font: var(--af-t-caption); color: var(--af-fg-3); min-width: 0; overflow-wrap: anywhere; }
+      .af-diag-where b { font: 500 12px/18px var(--af-mono); color: var(--af-fg-2); }
+      .af-diag-quote { margin: 0; font: 400 12px/18px var(--af-mono); color: var(--af-fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+      /* ---- published vs local: gaps, comparability, band curves ---- */
+      .af-compare { display: flex; flex-direction: column; gap: var(--af-s2); min-width: 0; }
+      .af-compare .af-subhead { margin-top: var(--af-s3); margin-bottom: 0; }
+      .af-compare-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--af-s3); }
+      .af-compare-pair[data-narrow] { grid-template-columns: minmax(0, 1fr); }
+      .af-compare-plot { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+      /* A value cell keeps its number on one line; the source under it wraps. */
+      .af-compare .af-table td.af-val .af-src, .af-compare .af-table td.af-val .af-hint { white-space: normal; font-weight: 400; }
+      .af-cmp-list { display: flex; flex-direction: column; }
+      .af-cmp-item { display: flex; flex-direction: column; gap: 2px; padding: var(--af-s2) 0; border-top: 1px solid var(--af-line-soft); font: var(--af-t-caption); min-width: 0; overflow-wrap: anywhere; }
+      .af-cmp-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px var(--af-s2); }
+      .af-cmp-head .af-num { font: 600 12px/18px var(--af-mono); }
+      .af-cmp-key { display: inline-block; min-width: 3.5em; margin-right: 6px; color: var(--af-fg-3); }
+      .af-cmp-item .af-num { font: 600 12px/18px var(--af-mono); }
+
+      /* ---- JSON outline (audits): one level at a time ---- */
+      .af-json { display: flex; flex-direction: column; font: 400 12px/18px var(--af-mono); min-width: 0; }
+      .af-json-row {
+        display: flex; align-items: baseline; gap: var(--af-s2); width: 100%; min-width: 0; padding: 1px 4px;
+        border: 0; border-radius: 4px; background: none; text-align: left; color: var(--af-fg); cursor: default;
+      }
+      button.af-json-row { cursor: pointer; }
+      button.af-json-row:hover { background: var(--af-hover); }
+      .af-json-key { flex: none; color: var(--af-fg); }
+      .af-json-type { flex: none; color: var(--af-fg-3); }
+      .af-json-val { min-width: 0; color: var(--af-fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .af-json-kids { margin-left: 14px; padding-left: var(--af-s2); border-left: 1px solid var(--af-line-soft); }
       .af-subhead { margin: var(--af-s4) 0 var(--af-s2); font: var(--af-t-micro); color: var(--af-fg-3); letter-spacing: .02em; }
       .af-viewbar { display: flex; align-items: center; gap: var(--af-s2); flex-wrap: wrap; padding-top: var(--af-s4); }
       .af-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--af-s2) var(--af-s3); margin-bottom: var(--af-s3); }
@@ -549,7 +616,14 @@ window.__ModuleLoader__.load({
       .af-ask-row { display: flex; align-items: center; gap: var(--af-s2); min-width: 0; }
       .af-ask-quick { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
       .af-ask-quick .af-btn { color: var(--af-fg-2); }
-      .af-agent-status { margin-left: auto; color: var(--af-fg-3); font: var(--af-t-caption); }
+      .af-agent-status {
+        margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        color: var(--af-fg-3); font: var(--af-t-caption);
+      }
+      .af-agent-status[data-tone="ok"] { color: var(--af-ok); }
+      /* A reason the message did not go out is read in full, on its own line. */
+      .af-agent-status[data-tone="warn"] { flex-basis: 100%; margin-left: 0; white-space: normal; color: var(--af-warn-text); }
+      .af-agent-foot .af-agent-status { display: block; margin-left: 0; white-space: normal; }
       .af-root[data-narrow] .af-ask-quick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
       .af-root[data-narrow] .af-ask-quick::-webkit-scrollbar { display: none; }
       .af-agent-foot { color: var(--af-fg-3); font: var(--af-t-caption); text-align: right; }
@@ -820,6 +894,16 @@ window.__ModuleLoader__.load({
       }
       if (code === 'FINISHED_UNCONVERGED') {
         return { code: 'unconv', label: '未收敛', detail: reason || '运行结束，但 SCF 没有收敛' };
+      }
+      if (code === 'FINISHED_NO_LOG') {
+        // The host found results but no librpa.out (UI.md §11a). The run produced output, so
+        // it is not "no output"; without the log its clean end cannot be shown, so it is not
+        // plain "ok" either. A QSGW table that never converged still decides "unconverged".
+        if (rows.length > 0 && convergedIter === null) {
+          return { code: 'unconv', label: '未收敛', detail: `QSGW 迭代表没有一行达到收敛判据；也没有 librpa.out 主日志${lastDelta ? `（第 ${lastDelta.iter} 次 max ΔE = ${lastDelta.max_delta_eV.toPrecision(3)} eV）` : ''}` };
+        }
+        const table = convergedIter !== null ? `QSGW 第 ${convergedIter} 次迭代达到收敛判据，` : '';
+        return { code: 'partial', label: status.label || '已完成（无日志）', detail: `${table}有计算产物，但没有保存 librpa.out，无法确认正常结束` };
       }
       if (code === 'NO_OUTPUT') {
         if (rows.length > 0) {
@@ -1447,6 +1531,586 @@ window.__ModuleLoader__.load({
       return lines.join('\n');
     }
 
+    // ------------------------------------------------------- stage diagnosis ---
+
+    /** The state glyph a diagnosis verdict is drawn with (the verdict's tone, not a new state). */
+    const DIAGNOSIS_GLYPH = { err: 'err', warn: 'unconv', ok: 'ok', info: 'none' };
+
+    /**
+     * The message that hands one stage's diagnosis to the agent (lib/host/diagnose.js
+     * produced it): the verdict, the quoted lines with file and line number, what the input
+     * asked for against what is there, the absent files. Nothing is added that the
+     * diagnosis did not say, and the agent is asked to confirm before acting.
+     */
+    function buildDiagnosisMessage(input) {
+      const { run, stage, state, diagnosis } = input || {};
+      const d = diagnosis || {};
+      const lines = ['【来自 ABACUS 面板 · 阶段诊断】'];
+      if (run) lines.push(`运行：${run.name}`);
+      if (stage) lines.push(`阶段：${stage.rel || stage.name}${state ? ` · ${state.label}` : ''}`);
+      if (stage && stage.task) lines.push(`目录：${stage.task.absPath}`);
+      if (d.verdict && d.verdict.text) lines.push(`结论：${d.verdict.text}`);
+      if ((d.lines || []).length) {
+        lines.push('关键日志行：');
+        for (const l of d.lines) lines.push(`- ${l.file}${l.line ? ` 第 ${l.line} 行` : ''}（${l.why}）：${l.text}`);
+      }
+      if ((d.checks || []).length) {
+        lines.push('输入要求 vs 输出：');
+        for (const c of d.checks) lines.push(`- ${c.ok === true ? '✓' : c.ok === false ? '✗' : '?'} ${c.asked} → ${c.found}${c.note ? `（${c.note}）` : ''}`);
+      }
+      if ((d.missing || []).length) {
+        lines.push('缺少的文件：');
+        for (const m of d.missing) lines.push(`- ${m.name}：${m.why}${m.need === 'required' ? '（必需）' : ''}`);
+      }
+      for (const n of d.notes || []) lines.push(`注：${n}`);
+      lines.push('请：说明这个阶段为什么会这样，给出下一步（改参数、续算、补拉文件还是重跑）。本地文件可能只是从集群拉回的一部分。');
+      lines.push('约束：这条消息来自只读面板。提交作业、改写输入或删除文件之前，请先向我确认。');
+      return lines.join('\n');
+    }
+
+    // -------------------------------------------- published vs local (§4.2) ---
+    //
+    // A published record and a local run differ in many ways besides the physics. These
+    // functions put the two side by side field by field, each value as its source states
+    // it, and say "same", "differs" or "cannot tell" — never more than the data supports.
+
+    /** File name of a path or alias: `../assets/basis/DZP/Ni_….orb` → `Ni_….orb`. */
+    function baseName(value) {
+      const text = String(value ?? '').trim();
+      return text ? text.split(/[\\/]/).pop() : '';
+    }
+
+    /** `QSGW`, `G0W0`, `evGW`, `GW` (unspecified), `EXX`, `RPA` or null, from a task or method text. */
+    function methodFamily(text) {
+      const t = String(text ?? '').toLowerCase();
+      if (!t) return null;
+      if (/qsgw/.test(t)) return 'QSGW';
+      if (/evgw|gw0\b/.test(t)) return 'evGW';
+      if (/g0w0/.test(t)) return 'G0W0';
+      if (/gw/.test(t)) return 'GW';
+      if (/\bexx\b|hartree-fock/.test(t)) return 'EXX';
+      if (/\brpa\b/.test(t)) return 'RPA';
+      return null;
+    }
+
+    /**
+     * Spin and spin-orbit coupling as a record's free-text notes state them ("spin-unpolarized,
+     * no SOC", "collinear spin-polarized"). The record has no structured field for either, so
+     * the panel reports these as read from the notes, and nothing when the notes are silent.
+     */
+    function recordSpinFacts(text) {
+      const t = String(text ?? '');
+      const facts = { nspin: null, soc: null };
+      if (/non-spin-polari[sz]ed|spin-unpolari[sz]ed|non-magnetic|nonmagnetic/i.test(t)) facts.nspin = 1;
+      else if (/spin-polari[sz]ed|antiferromagnetic|ferromagnetic|collinear spin/i.test(t)) facts.nspin = 2;
+      if (/\bno SOC\b|without SOC|without spin-orbit|no spin-orbit/i.test(t)) facts.soc = false;
+      else if (/\bSOC\b|spin-orbit/i.test(t)) facts.soc = true;
+      return facts;
+    }
+
+    /**
+     * What the local run is, in the terms a record can be compared on. `scf` is the bundle of
+     * the ABACUS stage that represents the run (`pickScfStage`); `consumer` the LibRPA stage
+     * being compared. Missing pieces stay null.
+     */
+    function localCompareFacts(input) {
+      const scf = input && input.scf ? input.scf.abacus : null;
+      const consumer = input && input.consumer ? input.consumer.librpa : null;
+      const params = scf && scf.input ? scf.input.params || {} : {};
+      const param = (name) => {
+        const key = Object.keys(params).find((k) => k.toLowerCase() === name);
+        return key === undefined ? null : String(params[key]).trim();
+      };
+      const species = scf && scf.stru ? scf.stru.species || [] : [];
+      const rows = input && input.consumer ? qsgwRows(input.consumer) : [];
+      const nspin = Number(String(param('nspin') ?? '').split(/\s+/)[0]);
+      const soc = param('lspinorb');
+      const kpt = scf ? scf.kpt : null;
+      // LibRPA prints `GITDIR-NO` when it was built outside a git checkout: no commit at all.
+      const hash = consumer && consumer.log && consumer.log.build ? consumer.log.build['Source code Git hash'] || null : null;
+      // Where the local KS gap was evaluated, as the gap ledger states it (a mesh or listed points).
+      const ksRow = ((input && input.ledger) || []).find((r) => r.producer === 'abacus' && isNum(r.valueEv)) || null;
+      return {
+        frontend: scf ? 'abacus' : null,
+        abacus: scf && scf.versions ? { version: scf.versions.version || null, commit: scf.versions.commit || null } : null,
+        librpa: consumer ? { commit: hash && /^[0-9a-f]{7,40}$/i.test(hash) ? hash : null, raw: hash } : null,
+        task: consumer ? consumer.task || null : null,
+        method: methodFamily(consumer && consumer.task),
+        iterations: rows.length ? { count: rows.length, first: rows[0].iter, last: rows[rows.length - 1].iter, converged: qsgwConvergedIter(input.consumer) } : null,
+        species: species.map((s) => ({
+          element: (/^[A-Z][a-z]?/.exec(String(s.label || '')) || [''])[0] || null,
+          pp: s.pp ? baseName(s.pp) : null,
+          nao: s.orbitals && s.orbitals[0] ? baseName(s.orbitals[0]) : null,
+        })),
+        atomCount: scf && scf.stru && isNum(scf.stru.natom) ? scf.stru.natom : null,
+        kMesh: kpt && kpt.mode === 'auto' && Array.isArray(kpt.grid) ? kpt.grid.join('×') : kpt && isNum(kpt.nkpts) ? `${kpt.nkpts} 个显式 k 点` : null,
+        scfStage: input ? input.scfRel || null : null,
+        functional: param('dft_functional'),
+        nspin: Number.isFinite(nspin) && nspin > 0 ? nspin : null,
+        soc: soc === null ? null : /^(1|true|t|\.t\.)$/i.test(soc),
+        ksGap: ksRow
+          ? { stage: ksRow.stage, quantity: ksRow.quantity, sampling: /显式 k 点/.test(ksRow.quantity) ? 'explicit' : /网格/.test(ksRow.quantity) ? 'mesh' : null }
+          : null,
+      };
+    }
+
+    /**
+     * The local run against one database record, row by row. `verdict` is 'same', 'differs'
+     * or 'unknown' (one side does not state it, or the statements cannot be compared).
+     */
+    function compareWithRecord(local, record) {
+      const L = local || {};
+      const R = record || {};
+      const rows = [];
+      const both = (a, b) => a !== null && a !== undefined && a !== '' && b !== null && b !== undefined && b !== '';
+      const commitVerdict = (a, b) => {
+        if (!both(a, b)) return 'unknown';
+        const x = String(a).toLowerCase();
+        const y = String(b).toLowerCase();
+        return Math.min(x.length, y.length) >= 7 && (x.startsWith(y) || y.startsWith(x)) ? 'same' : 'differs';
+      };
+
+      const gwProperty = (R.gapProperties || []).find((p) => methodFamily(p.method) && /gw/i.test(String(p.method)));
+      const pubMethod = methodFamily(gwProperty ? gwProperty.method : R.observable);
+      const localMethodText = L.task
+        ? `LibRPA ${L.task}${L.iterations ? `，迭代 ${L.iterations.first}–${L.iterations.last}${L.iterations.converged !== null ? `，第 ${L.iterations.converged} 次收敛` : '，未收敛'}` : ''}`
+        : null;
+      rows.push({
+        key: 'method',
+        label: '方法',
+        local: localMethodText,
+        published: R.observable || (gwProperty && gwProperty.method) || null,
+        verdict: !L.method || !pubMethod || L.method === 'GW' || pubMethod === 'GW' ? 'unknown' : L.method === pubMethod ? 'same' : 'differs',
+      });
+
+      const pubPrograms = (R.software || []).map((s) => `${s.name}${s.commit ? ` ${s.commit}` : '（未记录提交）'}`).join(' · ');
+      rows.push({
+        key: 'frontend',
+        label: '程序',
+        local: [L.frontend ? 'abacus' : null, L.librpa ? 'librpa' : null].filter(Boolean).join(' + ') || null,
+        published: R.frontend ? `${R.frontend}${R.workflowTask ? ` · ${R.workflowTask}` : ''}` : null,
+        verdict: both(L.frontend, R.frontend) ? (String(R.frontend).toLowerCase() === L.frontend ? 'same' : 'differs') : 'unknown',
+      });
+      const pubAbacus = (R.software || []).find((s) => s.name === 'abacus');
+      const pubLibrpa = (R.software || []).find((s) => s.name === 'librpa');
+      const localVersions = [
+        L.abacus ? `ABACUS ${L.abacus.version || ''}${L.abacus.commit ? ` (${L.abacus.commit})` : ''}`.trim() : null,
+        L.librpa ? `LibRPA ${L.librpa.commit ? L.librpa.commit.slice(0, 9) : L.librpa.raw ? `（构建信息是 ${L.librpa.raw}，没有提交号）` : '（没有构建信息）'}` : null,
+      ].filter(Boolean).join(' · ');
+      const versionVerdicts = [
+        pubAbacus ? commitVerdict(L.abacus && L.abacus.commit, pubAbacus.commit) : 'unknown',
+        pubLibrpa ? commitVerdict(L.librpa && L.librpa.commit, pubLibrpa.commit) : 'unknown',
+      ];
+      rows.push({
+        key: 'version',
+        label: '版本',
+        local: localVersions || null,
+        published: pubPrograms || null,
+        verdict: versionVerdicts.includes('differs') ? 'differs' : versionVerdicts.every((v) => v === 'same') ? 'same' : 'unknown',
+      });
+
+      const perElement = (field) => {
+        const pub = new Map((R.species || []).filter((s) => s.element).map((s) => [s.element, s[field] ? baseName(s[field]) : null]));
+        const loc = new Map((L.species || []).filter((s) => s.element).map((s) => [s.element, s[field] || null]));
+        const elements = [...new Set([...loc.keys(), ...pub.keys()])];
+        const verdicts = elements.map((el) => (both(loc.get(el), pub.get(el)) ? (loc.get(el) === pub.get(el) ? 'same' : 'differs') : 'unknown'));
+        const list = (map) => (elements.some((el) => map.get(el)) ? elements.map((el) => `${el}: ${map.get(el) || '—'}`).join(' · ') : null);
+        return {
+          local: list(loc),
+          published: list(pub),
+          verdict: verdicts.length === 0 ? 'unknown' : verdicts.includes('differs') ? 'differs' : verdicts.every((v) => v === 'same') ? 'same' : 'unknown',
+        };
+      };
+      rows.push({ key: 'nao', label: '数值原子轨道（基组）', ...perElement('nao') });
+      rows.push({ key: 'pp', label: '赝势', ...perElement('pp') });
+      const abf = (R.species || []).filter((s) => s.abf).map((s) => `${s.element}: ${baseName(s.abf)}`).join(' · ');
+      rows.push({ key: 'abf', label: '辅助基（ABF）', local: null, published: abf || null, verdict: 'unknown', note: '本地的辅助基在 LibRPA 输入目录里，面板读不到' });
+
+      rows.push({
+        key: 'kmesh',
+        label: 'SCF k 网格',
+        local: L.kMesh ? `${L.kMesh}${L.scfStage ? `（${L.scfStage}）` : ''}` : null,
+        published: null,
+        verdict: 'unknown',
+        note: `记录没有 SCF k 网格字段${isNum(R.pathKpoints) ? `；只有能带路径 ${R.pathKpoints} 个点` : ''}`,
+      });
+      rows.push({
+        key: 'atoms',
+        label: '晶胞原子数',
+        local: isNum(L.atomCount) ? String(L.atomCount) : null,
+        published: isNum(R.atomCount) ? String(R.atomCount) : null,
+        verdict: both(L.atomCount, R.atomCount) ? (L.atomCount === R.atomCount ? 'same' : 'differs') : 'unknown',
+      });
+      const spin = recordSpinFacts(R.notes);
+      rows.push({
+        key: 'nspin',
+        label: '自旋',
+        local: isNum(L.nspin) ? `nspin = ${L.nspin}` : null,
+        published: spin.nspin === null ? null : `nspin = ${spin.nspin}（据记录说明文字）`,
+        // nspin = 4 (non-collinear) has no counterpart in "polarised / unpolarised" prose.
+        verdict: both(L.nspin, spin.nspin) && L.nspin <= 2 ? (L.nspin === spin.nspin ? 'same' : 'differs') : 'unknown',
+      });
+      rows.push({
+        key: 'soc',
+        label: '自旋轨道耦合',
+        local: L.soc === null || L.soc === undefined ? null : L.soc ? '有（lspinorb = 1）' : '无',
+        published: spin.soc === null ? null : `${spin.soc ? '有' : '无'}（据记录说明文字）`,
+        verdict: both(L.soc, spin.soc) ? (L.soc === spin.soc ? 'same' : 'differs') : 'unknown',
+      });
+      // Only what each side states: the local KS gap's sampling comes from the ledger row it is
+      // read from. Where LibRPA evaluates the gap it writes to qsgw_iterations.dat is not stated
+      // in its files, so that part is never claimed either way.
+      const pubPath = Boolean(R.gapDefinition && /path|路径|sampled/i.test(R.gapDefinition));
+      const ks = L.ksGap;
+      rows.push({
+        key: 'definition',
+        label: '能隙定义',
+        local: [ks ? `KS：${ks.stage} 的 ${ks.quantity.replace(/^KS 能隙 /, '')}` : null, L.task ? 'GW：LibRPA 写在 qsgw_iterations.dat 的 gap_eV' : null].filter(Boolean).join('；') || null,
+        published: R.gapDefinition || null,
+        verdict: pubPath && ks && ks.sampling === 'mesh' ? 'differs' : 'unknown',
+        note: pubPath && ks && ks.sampling === 'mesh'
+          ? '本地 KS 能隙在 k 网格上，已发表的在能带路径上'
+          : pubPath ? '已发表的是能带路径上的能隙；本地的取样是否相同，文件里没有写明' : '',
+      });
+      return rows;
+    }
+
+    /**
+     * Published gaps next to the local ones of the same family, each with its source. The
+     * difference is printed because people will compute it anyway; `caveats` names every
+     * compared field that differs or cannot be checked, so the number is read with them.
+     */
+    function gapComparison(ledger, record, rows) {
+      const R = record || {};
+      const local = (ledger || []).filter((r) => r.producer !== 'db');
+      const ks = local.find((r) => r.producer === 'abacus' && isNum(r.valueEv)) || null;
+      const gw = local.find((r) => r.producer === 'librpa' && /^QSGW 能隙/.test(r.quantity) && isNum(r.valueEv))
+        || local.find((r) => r.producer === 'librpa' && isNum(r.valueEv)) || null;
+      const differing = (keys) => (rows || []).filter((r) => keys.includes(r.key) && r.verdict === 'differs').map((r) => r.label);
+      const unknown = (keys) => (rows || []).filter((r) => keys.includes(r.key) && r.verdict === 'unknown').map((r) => r.label);
+      const caveat = (keys) => {
+        const d = differing(keys);
+        const u = unknown(keys);
+        return [d.length ? `不同：${d.join('、')}` : null, u.length ? `无法核对：${u.join('、')}` : null].filter(Boolean).join('；');
+      };
+      const common = ['frontend', 'version', 'nao', 'pp', 'kmesh', 'atoms', 'nspin', 'soc', 'definition'];
+      const pairs = [
+        { key: 'ks', label: 'KS / DFT 能隙', local: ks, publishedEv: R.dftGapEv, publishedKey: 'dft_gap_ev', caveats: caveat(common) },
+        { key: 'exx', label: 'EXX 能隙', local: null, publishedEv: R.exxGapEv, publishedKey: 'exx_gap_ev', caveats: caveat(common) },
+        { key: 'gw', label: 'GW 能隙', local: gw, publishedEv: R.gwGapEv, publishedKey: 'gw_gap_ev', caveats: caveat(['method', ...common]) },
+      ];
+      return pairs
+        .filter((p) => p.local || isNum(p.publishedEv))
+        .map((p) => ({
+          key: p.key,
+          label: p.label,
+          local: p.local ? { valueEv: p.local.valueEv, source: p.local.source, what: `${p.local.stage} · ${p.local.quantity}` } : null,
+          published: isNum(p.publishedEv) ? { valueEv: p.publishedEv, source: `${R.id} · summary.${p.publishedKey}` } : null,
+          deltaEv: p.local && isNum(p.publishedEv) ? p.local.valueEv - p.publishedEv : null,
+          caveats: p.caveats,
+        }));
+    }
+
+    // ------------------------------------------------------- database figures ---
+
+    const FIGURE_TABS = [
+      ['KS', 'KS'],
+      ['EXX', 'EXX'],
+      ['GW', 'GW'],
+      ['QSGW', 'QSGW'],
+      ['compare', '对比'],
+      ['other', '其他'],
+    ];
+    const IMAGE_KINDS = new Set(['svg', 'png', 'jpg']);
+
+    /**
+     * A record's figures as the panel shows them: one tab per quantity, one card per plot.
+     *
+     * `figures` are the host's items (`kind` from the URL extension, `quantity` from caption
+     * and file name, `stem` = file name without extension). A PNG and the PDF of the same
+     * plot share a stem and become one card: the image is shown, the PDF is a link. A PDF
+     * with no image is a card of its own (link only). Refused URLs (`url: null`) stay listed
+     * so the panel can say so.
+     *
+     * The tab opened first holds the record's `primary` figure, else GW (the quantity the
+     * database exists for), else the comparison, else the first tab.
+     *
+     * @param {Array<{label:string, url:string|null, kind:string, quantity:string, stem?:string|null, primary?:boolean}>} figures
+     * @returns {{ tabs: Array<{key:string, label:string, cards:Array}>, defaultKey: string|null }}
+     */
+    function groupFigures(figures) {
+      const byTab = new Map();
+      for (const item of figures || []) {
+        const key = FIGURE_TABS.some(([k]) => k === item.quantity) ? item.quantity : 'other';
+        if (!byTab.has(key)) byTab.set(key, new Map());
+        const cards = byTab.get(key);
+        const stem = item.stem || item.label;
+        if (!cards.has(stem)) cards.set(stem, { key: stem, caption: '', image: null, pdf: null, files: [], primary: false });
+        const card = cards.get(stem);
+        if (IMAGE_KINDS.has(item.kind) && !card.image) card.image = item;
+        else if (item.kind === 'pdf' && !card.pdf) card.pdf = item;
+        else card.files.push(item); // a kind the panel does not render: offered as a link
+        // The image's caption names the plot; a PDF-only card takes the PDF's.
+        if (!card.caption || IMAGE_KINDS.has(item.kind)) card.caption = item.label;
+        if (item.primary) card.primary = true;
+      }
+      const tabs = FIGURE_TABS.filter(([key]) => byTab.has(key)).map(([key, label]) => ({ key, label, cards: [...byTab.get(key).values()] }));
+      const primary = tabs.find((tab) => tab.cards.some((card) => card.primary));
+      const pick = primary || tabs.find((tab) => tab.key === 'GW') || tabs.find((tab) => tab.key === 'compare') || tabs[0];
+      return { tabs, defaultKey: pick ? pick.key : null };
+    }
+
+    /**
+     * One level of a JSON value, for the audit outline: what each entry is and how big,
+     * never the whole document at once (an audit runs to 800 KB).
+     *
+     * @param {*} value
+     * @param {number} [limit] entries listed before "… N more"
+     * @returns {{ entries: Array<{key:string, type:string, size:number|null, preview:string, expandable:boolean}>, more: number }}
+     */
+    function jsonOutline(value, limit = 200) {
+      const typeOf = (v) => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v);
+      const preview = (v) => {
+        const t = typeOf(v);
+        if (t === 'array') return v.length === 0 ? '[]' : `[${v.length}]${v.every((x) => typeof x === 'number') ? ` ${v.slice(0, 6).map((x) => +x.toFixed(6)).join(', ')}${v.length > 6 ? ', …' : ''}` : ''}`;
+        if (t === 'object') {
+          const keys = Object.keys(v);
+          return `{${keys.length}} ${keys.slice(0, 4).join(', ')}${keys.length > 4 ? ', …' : ''}`;
+        }
+        if (t === 'string') return JSON.stringify(v.length > 160 ? `${v.slice(0, 160)}…` : v);
+        return String(v);
+      };
+      const t = typeOf(value);
+      if (t !== 'array' && t !== 'object') return { entries: [], more: 0 };
+      const pairs = t === 'array' ? value.map((v, i) => [String(i), v]) : Object.entries(value);
+      const entries = pairs.slice(0, limit).map(([key, v]) => {
+        const type = typeOf(v);
+        const size = type === 'array' ? v.length : type === 'object' ? Object.keys(v).length : null;
+        return { key, type, size, preview: preview(v), expandable: (type === 'array' || type === 'object') && size > 0 };
+      });
+      return { entries, more: Math.max(0, pairs.length - limit) };
+    }
+
+    /** "225.6 KB" */
+    function fmtBytes(n) {
+      if (!isNum(n)) return '';
+      if (n < 1024) return `${n} B`;
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+      return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    // ------------------------------------------------------ ask-box session ---
+    //
+    // Which DSH session the ask box posts into, decided from what each Client accessor
+    // returned, so the panel can always say why it cannot send (UI.md §6.3).
+
+    /**
+     * The session the workspace shows in the main view.
+     *
+     * The same rule DSH's own title bar and Cordis panel use: the session whose
+     * `retainedBy.mainView` count is positive. The workspace keeps that retain while a
+     * global panel covers the conversation (it changes only when the user picks another
+     * session), so on the main page it still names the conversation the user came from.
+     *
+     * @param {{byId?: Record<string, {id?: string, retainedBy?: Record<string, number>}>}|null} listState `sessions.list.getSnapshot()`
+     * @returns {string|undefined}
+     */
+    function mainViewSessionId(listState) {
+      const byId = listState && listState.byId;
+      if (!byId || typeof byId !== 'object') return undefined;
+      for (const [id, row] of Object.entries(byId)) {
+        const retained = row && row.retainedBy ? row.retainedBy.mainView : undefined;
+        if (typeof retained === 'number' && retained > 0) return (row && row.id) || id;
+      }
+      return undefined;
+    }
+
+    /**
+     * What the accessors returned, turned into a usable link or the reason there is none.
+     *
+     * @param {object} probe
+     * @param {'main'|'dock'} probe.slot
+     * @param {string} [probe.propSessionId] `props.sessionId`; DSH passes it to the dock tab only
+     * @param {boolean} probe.service `ctx.get('sessions')` returned `list` and `binding`
+     * @param {string} [probe.mainViewId] `mainViewSessionId(sessions.list.getSnapshot())`
+     * @param {string} [probe.listPhase] the list's `phase` ('pending' while it loads)
+     * @param {string} [probe.title] the session's title from the list
+     * @param {boolean} probe.bound `sessions.binding(id)` returned a binding with a session
+     * @param {boolean} probe.promptable that session has `beginSubmission` and `prompt`
+     * @returns {{ok: boolean, accessor: string, sessionId?: string, title?: string, reason?: string}}
+     */
+    function describeSessionLink(probe) {
+      const p = probe || {};
+      if (!p.service) {
+        return { ok: false, accessor: "ctx.get('sessions')", reason: "拿不到 DSH 的会话服务（ctx.get('sessions') 没有返回 list 与 binding），面板没法往对话里发消息。" };
+      }
+      const accessor = p.propSessionId ? 'props.sessionId' : "sessions.list → retainedBy.mainView";
+      const sessionId = p.propSessionId || p.mainViewId;
+      if (!sessionId) {
+        if (p.listPhase === 'pending') return { ok: false, accessor, reason: '会话列表还在加载，稍等再发。' };
+        return {
+          ok: false,
+          accessor,
+          reason: p.slot === 'dock' ? '侧栏没有收到会话，工作区里也没有打开的对话。' : '工作区里没有打开的对话：先在左侧选一个对话或新建一个，再回到面板发送。',
+        };
+      }
+      const named = p.title ? `「${p.title}」` : `（${String(sessionId).slice(0, 8)}）`;
+      if (!p.bound) {
+        return {
+          ok: false,
+          accessor: `${accessor} → sessions.binding(id)`,
+          sessionId,
+          title: p.title,
+          reason: `对话${named}没有被 DSH 保持（sessions.binding 返回空），面板借用不到它；切回这个对话再回来通常就好。`,
+        };
+      }
+      if (!p.promptable) {
+        return {
+          ok: false,
+          accessor: `${accessor} → binding.session`,
+          sessionId,
+          title: p.title,
+          reason: `对话${named}的会话对象没有 beginSubmission/prompt，可能是 DSH 版本不匹配。`,
+        };
+      }
+      return { ok: true, accessor, sessionId, title: p.title };
+    }
+
+    /** A host refusal (`RemoteError`: code + message) in one line. */
+    function describeRemoteError(error) {
+      if (!error) return '';
+      const code = typeof error.code === 'string' ? error.code : '';
+      const message = typeof error.message === 'string' ? error.message : typeof error === 'string' ? error : '';
+      return [code, message].filter(Boolean).join('：') || String(error);
+    }
+
+    /**
+     * One ask-box message as DSH reports it back: sending → accepted → delivered, or rejected.
+     *
+     * The reports do not arrive in a fixed order. When `prompt` fails, DSH retires the echo
+     * (`onRetire` 'failed') before `prompt` resolves with the error; the transcript can show
+     * the message before the admission reply arrives. So a state only moves forward, and a
+     * rejection is final, except that a later report may supply its reason.
+     *
+     * @param {{phase: string, queued?: boolean, detail?: string, late?: boolean}|null} prev
+     * @param {{type: 'sending'|'accepted'|'observed'|'retired'|'refused', queued?: boolean, detail?: string}} event
+     */
+    function submissionStep(prev, event) {
+      const e = event || {};
+      const cur = prev || { phase: 'idle' };
+      if (cur.phase === 'rejected') {
+        return !cur.detail && e.detail && e.type === 'refused' ? { ...cur, detail: e.detail } : cur;
+      }
+      if (cur.phase === 'delivered') return cur;
+      switch (e.type) {
+        case 'sending':
+          return { phase: 'sending', queued: Boolean(e.queued) };
+        case 'accepted':
+          return cur.phase === 'idle' || cur.phase === 'sending' ? { ...cur, phase: 'accepted' } : cur;
+        case 'observed':
+          return { ...cur, phase: 'delivered' };
+        case 'retired':
+          // An echo retired after the host had accepted it: the queued message was withdrawn
+          // or the session closed. Before acceptance it is the refusal `prompt` will explain.
+          return cur.phase === 'accepted'
+            ? { ...cur, phase: 'rejected', late: true, detail: e.detail || '对话先接收了这条消息，随后又把它撤下（排队的消息被取消，或会话已关闭）' }
+            : { ...cur, phase: 'rejected', detail: e.detail || '' };
+        case 'refused':
+          return { ...cur, phase: 'rejected', detail: e.detail || '' };
+        default:
+          return cur;
+      }
+    }
+
+    /** The status line for one submission. */
+    function submissionLabel(state, title) {
+      const to = title ? `「${title}」` : '对话';
+      switch (state && state.phase) {
+        case 'sending':
+          return `正在发往${to}…`;
+        case 'accepted':
+          return state.queued ? `${to}已接收：Agent 正在运行，这条排在当前回合之后` : `${to}已接收`;
+        case 'delivered':
+          return `已出现在${to}里`;
+        case 'rejected':
+          return `没有送达${to}：${state.detail || 'DSH 撤下了这条消息'}`;
+        default:
+          return '';
+      }
+    }
+
+    /**
+     * Post one message from the panel into a DSH session, the way DSH's own composer does.
+     *
+     * §3.2 root cause, part 2: `ISession.beginSubmission` only registers the local echo (the
+     * pending bubble) and mints a request id; it sends nothing. The composer follows it with
+     * `session.prompt(content, mode, signal, requestId)`, which is the call that reaches the
+     * Host. The old `askAgent` stopped after `beginSubmission`, so even in the right dock,
+     * where the session did resolve, a message never left the browser. Its fallback typed
+     * into `textarea:not(.af-textarea)`, which on the main page is not the composer at all.
+     *
+     * Every report goes to `report` (see `submissionStep`): 'sending' at once, then
+     * 'accepted' when the Host admits the prompt, 'observed' when the transcript shows it,
+     * 'retired' when DSH removes the echo unobserved, 'refused' with the Host's reason.
+     * A refusal that arrives after acceptance is reported too, through `onRetire`.
+     *
+     * The panel stays read-only: this composes and posts a message; the agent decides what
+     * to run, and asks before it does.
+     *
+     * @param {object} session the `ISession` face from `sessions.binding(id).session`
+     * @param {string} text
+     * @param {(event: {type: string, queued?: boolean, detail?: string}) => void} report
+     */
+    function postToSession(session, text, report) {
+      let queued = false;
+      try {
+        const snapshot = typeof session.getSnapshot === 'function' ? session.getSnapshot() : null;
+        queued = Boolean(snapshot && snapshot.running);
+      } catch {
+        /* the running flag only refines the label */
+      }
+      report({ type: 'sending', queued });
+      let handle;
+      try {
+        handle = session.beginSubmission({
+          mode: 'queue',
+          text,
+          attachments: [],
+          onRetire: (retirement) => {
+            if (retirement && retirement.reason === 'observed') report({ type: 'observed' });
+            else {
+              console.info('[abacusflow] ask box: DSH retired the message without showing it', retirement);
+              report({ type: 'retired' });
+            }
+          },
+        });
+      } catch (error) {
+        console.info('[abacusflow] ask box: session.beginSubmission threw', error);
+        report({ type: 'refused', detail: `beginSubmission 出错：${(error && error.message) || error}` });
+        return;
+      }
+      Promise.resolve()
+        .then(() => session.prompt([{ type: 'text', text }], 'queue', undefined, handle && handle.requestId))
+        .then(
+          (result) => {
+            if (result && result.ok) report({ type: 'accepted' });
+            else {
+              console.info('[abacusflow] ask box: session.prompt refused', result);
+              report({ type: 'refused', detail: describeRemoteError(result && result.error) || 'Host 拒绝了这条消息' });
+            }
+          },
+          (error) => {
+            console.info('[abacusflow] ask box: session.prompt threw', error);
+            try {
+              if (handle && typeof handle.abandon === 'function') handle.abandon();
+            } catch {
+              /* the echo is gone already */
+            }
+            report({ type: 'refused', detail: `prompt 出错：${(error && error.message) || error}` });
+          },
+        );
+    }
+
     /* @pure-end */
 
     // =====================================================================
@@ -1533,65 +2197,16 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /**
-     * Ask the agent a question about the current task, from inside the panel.
-     *
-     * Uses the session's `beginSubmission`, so the text arrives as a real user message and
-     * the agent can then act on it — edit an INPUT, look at a file, check a run. That is the
-     * point of asking from the panel rather than in the composer: the question carries the
-     * task context, so the user never has to describe which calculation they mean.
-     *
-     * `beginSubmission` returns a handle immediately; acceptance is not delivery. The
-     * `onRetire` callback fires when the Host settles the submission, so a rejection that
-     * happens later is reported rather than silently dropped.
-     *
-     * Falls back to prefilling the composer when no session is bound, because losing the
-     * text would be worse than needing one more click.
-     *
-     * @param {object|null} session the `ISession` face from `sessions.binding(id).session`
-     * @param {string} text
-     * @param {(outcome:'accepted'|'failed', detail?:string)=>void} [onOutcome]
-     * @returns {'submitted'|'prefilled'|'failed'}
-     */
-    function askAgent(session, text, onOutcome) {
-      if (session && typeof session.beginSubmission === 'function') {
-        try {
-          const handle = session.beginSubmission({
-            mode: 'queue',
-            text,
-            attachments: [],
-            onRetire: (retirement) => {
-              if (retirement && retirement.reason === 'failed') {
-                console.error('[abacusflow] submission was rejected by the host');
-                if (onOutcome) onOutcome('failed', 'Host 拒绝了这条消息');
-              } else if (onOutcome) {
-                onOutcome('accepted');
-              }
-            },
-          });
-          if (handle) return 'submitted';
-        } catch (error) {
-          console.error('[abacusflow] beginSubmission threw:', error);
-        }
-      }
-      return prefillComposer(text) ? 'prefilled' : 'failed';
-    }
-
-    /** Put text into the chat composer without sending it. */
-    function prefillComposer(text) {
-      const textarea = document.querySelector('textarea[data-dsh-composer], .dsh-composer textarea, textarea:not(.af-textarea)');
-      if (!textarea) return false;
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-      if (setter) setter.call(textarea, text);
-      else textarea.value = text;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.focus();
+    /** Copy text for the user to paste themselves; resolves to whether it worked. */
+    function copyText(text) {
       try {
-        textarea.setSelectionRange(text.length, text.length);
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          return navigator.clipboard.writeText(text).then(() => true, () => false);
+        }
       } catch {
-        /* some inputs reject selection */
+        /* no clipboard in this context */
       }
-      return true;
+      return Promise.resolve(false);
     }
 
     // ---------------------------------------------------------------- caches ---
@@ -1732,6 +2347,9 @@ window.__ModuleLoader__.load({
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [key]);
+      // Until the effect has run for a new key, the state still describes the old one: report
+      // "loading" rather than a moment of "no data" (or the previous key's data).
+      if (key !== null && key !== undefined && state.key !== key) return { key, data: null, error: null, loading: true };
       return state;
     }
 
@@ -2031,7 +2649,10 @@ window.__ModuleLoader__.load({
           collapsible ? h(Icon16, { name: open ? 'chevronDown' : 'chevronRight', size: 12 }) : null,
           h('h3', { className: 'af-section-title' }, props.title),
           props.meta ? h('span', { className: 'af-section-meta' }, props.meta) : null,
-          props.actions ? h('div', { className: 'af-section-actions' }, props.actions) : null,
+          // A control in a collapsible header acts for itself; it must not also fold the section.
+          props.actions
+            ? h('div', { className: 'af-section-actions', onClick: (event) => event.stopPropagation(), onKeyDown: (event) => event.stopPropagation() }, props.actions)
+            : null,
         ),
         collapsible ? (open ? props.children : null) : props.children,
       );
@@ -3396,6 +4017,236 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // ------------------------------------------------- published vs local (§4.2) ---
+
+    const VERDICT_LABEL = { same: '相同', differs: '不同', unknown: '无法核对' };
+    const VERDICT_GLYPH = { same: 'ok', differs: 'unconv', unknown: 'none' };
+
+    /**
+     * This run against one published record: gaps side by side, each with its source; every
+     * field that makes the two comparable or not, as each source states it; and the band
+     * curves — on one axis only when the k paths are provably the same.
+     */
+    function PublishedComparison(props) {
+      const { run, bundles, lineage, ledger, matches, focusL, iteration, narrow } = props;
+      const [recordId, setRecordId] = useState(null);
+      const record = matches.find((m) => m.id === recordId) || matches[0] || null;
+      if (!record) return null;
+      const factsStage = pickFactsStage(run, bundles, lineage);
+      const local = localCompareFacts({
+        scf: factsStage ? bundles[factsStage.id] : null,
+        consumer: focusL ? bundles[focusL.id] : null,
+        scfRel: factsStage ? factsStage.rel : null,
+        ledger,
+      });
+      const rows = compareWithRecord(local, record);
+      const gaps = gapComparison(ledger, record, rows);
+      const differs = rows.filter((r) => r.verdict === 'differs').map((r) => r.label);
+      const unknown = rows.filter((r) => r.verdict === 'unknown').length;
+      const cell = (value) => (value ? value : h('span', { className: 'af-hint' }, '未记录'));
+
+      return h(
+        'div',
+        { className: 'af-compare' },
+        h('div', { className: 'af-controls' },
+          matches.length > 1
+            ? h('span', { className: 'af-control' }, '数据库记录',
+                h(Seg, { label: '数据库记录', value: record.id, options: matches.slice(0, 4).map((m) => ({ value: m.id, label: m.id })), onChange: setRecordId }))
+            : h('span', { className: 'af-control' }, '数据库记录', h('b', { className: 'af-mono' }, record.id)),
+          record.confidence
+            ? h('span', { className: 'af-conf', 'data-c': record.confidence }, record.confidence === 'high' ? '按 STRU 组成匹配' : record.confidence === 'medium' ? '按目录名匹配，请确认' : '弱候选')
+            : null),
+        h(Note, { tone: differs.length ? 'warn' : 'info' },
+          differs.length
+            ? `有 ${differs.length} 处不同（${differs.join('、')}）${unknown ? `，${unknown} 处无法核对` : ''}：下面的能隙差包含这些差别，不是误差，也不是同一物理量的偏差。`
+            : `没有发现明确不同的字段${unknown ? `，但有 ${unknown} 处无法核对` : ''}；数值差仍可能来自没有记录的设置。`),
+        h('div', { className: 'af-subhead' }, '能隙 · 各自注明来源'),
+        gaps.length === 0
+          ? h('div', { className: 'af-hint' }, '两边都没有可对照的能隙。')
+          : narrow
+            // At dock width a four-column table with file paths cannot breathe: one block per gap.
+            ? h('div', { className: 'af-cmp-list' },
+                gaps.map((g) =>
+                  h('div', { key: g.key, className: 'af-cmp-item' },
+                    h('div', { className: 'af-cmp-head' }, h('b', null, g.label),
+                      isNum(g.deltaEv) ? h('span', { className: 'af-num' }, `本地 − 已发表 ${g.deltaEv >= 0 ? '+' : ''}${g.deltaEv.toFixed(3)} eV`) : null),
+                    h('div', null, h('span', { className: 'af-cmp-key' }, '本地'), g.local ? h('span', { className: 'af-num' }, fmtEv(g.local.valueEv)) : '本地没有这个量',
+                      g.local ? h('div', { className: 'af-src' }, `${g.local.what} · ${g.local.source}`) : null),
+                    h('div', null, h('span', { className: 'af-cmp-key' }, '已发表'), g.published ? h('span', { className: 'af-num' }, fmtEv(g.published.valueEv)) : '—',
+                      g.published ? h('div', { className: 'af-src' }, g.published.source) : null),
+                    g.caveats ? h('div', { className: 'af-hint' }, g.caveats) : null)))
+            : h('div', { className: 'af-table-wrap' },
+              h('table', { className: 'af-table' },
+                h('thead', null, h('tr', null, h('th', null, '量'), h('th', { className: 'af-num' }, '本地'), h('th', { className: 'af-num' }, '已发表'), h('th', { className: 'af-num' }, '本地 − 已发表'))),
+                h('tbody', null,
+                  gaps.map((g) =>
+                    h('tr', { key: g.key },
+                      h('td', null, g.label, g.caveats ? h('div', { className: 'af-hint' }, g.caveats) : null),
+                      h('td', { className: 'af-val' }, g.local ? fmtEv(g.local.valueEv) : '—', g.local ? h('div', { className: 'af-src', style: { fontWeight: 400 } }, `${g.local.what} · ${g.local.source}`) : h('div', { className: 'af-hint', style: { fontWeight: 400 } }, '本地没有这个量')),
+                      h('td', { className: 'af-val' }, g.published ? fmtEv(g.published.valueEv) : '—', g.published ? h('div', { className: 'af-src', style: { fontWeight: 400 } }, g.published.source) : null),
+                      h('td', { className: 'af-val' }, isNum(g.deltaEv) ? `${g.deltaEv >= 0 ? '+' : ''}${g.deltaEv.toFixed(3)} eV` : '—')))))),
+        h('div', { className: 'af-subhead' }, '能否直接比较 · 每项按各自来源原样列出'),
+        narrow
+          ? h('div', { className: 'af-cmp-list' },
+              rows.map((r) =>
+                h('div', { key: r.key, className: 'af-cmp-item' },
+                  h('div', { className: 'af-cmp-head' }, h('b', null, r.label),
+                    h('span', { className: 'af-state', 'data-s': VERDICT_GLYPH[r.verdict] }, h(StateGlyph, { code: VERDICT_GLYPH[r.verdict], size: 11 }), h('span', { className: 'af-state-label' }, VERDICT_LABEL[r.verdict]))),
+                  h('div', null, h('span', { className: 'af-cmp-key' }, '本地'), cell(r.local)),
+                  h('div', null, h('span', { className: 'af-cmp-key' }, '已发表'), cell(r.published)),
+                  r.note ? h('div', { className: 'af-hint' }, r.note) : null)))
+          : h('div', { className: 'af-table-wrap' },
+          h('table', { className: 'af-table' },
+            h('thead', null, h('tr', null, h('th', null, '项'), h('th', null, '本地'), h('th', null, '已发表'), h('th', null, '判断'))),
+            h('tbody', null,
+              rows.map((r) =>
+                h('tr', { key: r.key },
+                  h('td', { style: { whiteSpace: 'nowrap' } }, r.label),
+                  h('td', { style: { overflowWrap: 'anywhere' } }, cell(r.local)),
+                  h('td', { style: { overflowWrap: 'anywhere' } }, cell(r.published)),
+                  h('td', null,
+                    h('span', { className: 'af-state', 'data-s': VERDICT_GLYPH[r.verdict] }, h(StateGlyph, { code: VERDICT_GLYPH[r.verdict], size: 11 }), h('span', { className: 'af-state-label' }, VERDICT_LABEL[r.verdict])),
+                    r.note ? h('div', { className: 'af-hint' }, r.note) : null)))))),
+        h('div', { className: 'af-subhead' }, '能带'),
+        h(PublishedBandCompare, { record, focusL, iteration, narrow }),
+      );
+    }
+
+    /** A plotting window around zero for E − E_VBM, or around the data for absolute energies. */
+    function compareWindow(channels, relative, gapEv) {
+      if (relative) return { lo: -4, hi: Math.max(4, (isNum(gapEv) ? gapEv : 0) + 3) };
+      let min = Infinity;
+      let max = -Infinity;
+      for (const ch of channels) {
+        for (const row of ch.energies || []) {
+          for (const e of row) {
+            if (isNum(e)) {
+              if (e < min) min = e;
+              if (e > max) max = e;
+            }
+          }
+        }
+      }
+      return Number.isFinite(min) ? defaultWindow({ min, max }, (min + max) / 2, 6) : { lo: -10, hi: 10 };
+    }
+
+    /**
+     * One published band table against the matching local LibRPA channel. The host parses
+     * the published file exactly as a local one (`publishedBandChannel`); `alignChannel`
+     * then decides: the same k path → one axis; anything else → two plots side by side with
+     * the reason. Each curve is drawn as E − E_VBM of its own file (band edges from
+     * occupations), the convention the database's own figures use, and only when both
+     * VBMs are known; otherwise both stay absolute and the reader is told why.
+     */
+    function PublishedBandCompare(props) {
+      const { record, focusL, iteration, narrow } = props;
+      const assets = useApi(`assets:${record.id}`, () => api(`/library/assets?id=${encodeURIComponent(record.id)}`));
+      const bandData = assets.data && assets.data.ok ? (assets.data.bandData || []).filter((b) => b.url) : [];
+      const [pickUrl, setPickUrl] = useState(null);
+      const item = bandData.find((b) => b.url === pickUrl) || bandData.find((b) => b.quantity === 'GW') || bandData[0] || null;
+      const localKind = item ? { KS: 'KS', EXX: 'EXX', GW: 'QSGW', QSGW: 'QSGW' }[item.quantity] || null : null;
+      const spin = item && item.spin ? item.spin : 1;
+      const localIter = localKind === 'QSGW' && iteration !== null && iteration !== undefined ? iteration : null;
+      const published = useApi(item ? `pubband:${record.id}:${item.url}` : null, () =>
+        api(`/library/band?id=${encodeURIComponent(record.id)}&url=${encodeURIComponent(item.url)}`));
+      const requests = focusL && localKind ? [{ id: 'local', taskId: focusL.id, only: `${localKind}:${spin}`, iteration: localIter }] : [];
+      const loaded = useBandRequests(requests);
+      const edges = useApi(focusL && localKind ? `kc1:${focusL.id}:${localKind}:${spin}:${localIter ?? ''}:${cacheGeneration}` : null, () =>
+        api(`/kcompare?ids=${encodeURIComponent(focusL.id)}&kind=${localKind}&spin=${spin}${localIter !== null ? `&iter=${localIter}` : ''}`));
+
+      if (assets.loading) return h(Loading, null, '读取记录的能带文件清单…');
+      if (bandData.length === 0) return h('div', { className: 'af-hint' }, '这条记录没有上传能带数据表，只能对照数值。');
+
+      const pub = published.data && published.data.ok ? published.data : null;
+      const localData = loaded.local && loaded.local.data;
+      const localCh = localData && focusL
+        ? buildBandChannels({ librpa: localData.librpa }, focusL.rel).find((c) => c.kind === localKind && c.spin === spin) || null
+        : null;
+      const localRow = edges.data && edges.data.rows ? edges.data.rows[0] || null : null;
+      const localVbm = localRow && isNum(localRow.vbmEv) ? localRow.vbmEv : null;
+      const pubCh = pub ? { key: 'published', kpath: pub.kpath, energies: pub.energies, nBand: pub.nBand, nKpoint: pub.nKpoint } : null;
+      const relative = isNum(localVbm) && pub && isNum(pub.vbmEv);
+      const alignment = localCh && pubCh ? alignChannel(localCh, pubCh, null) : null;
+      const shift = (energies, vbm) => (relative ? energies.map((row) => row.map((e) => (isNum(e) ? e - vbm : e))) : energies);
+      const localSeries = localCh ? { key: 'local', xs: localCh.kpath, energies: shift(localCh.energies, localVbm), nBand: localCh.nBand, color: 'var(--af-c-qsgw)', width: 1.4 } : null;
+      const pubSeries = pubCh ? { key: 'published', xs: pubCh.kpath, energies: shift(pubCh.energies, pub && pub.vbmEv), nBand: pubCh.nBand, color: 'var(--af-db)', dash: '5 3', width: 1.1 } : null;
+      const localLabel = focusL && localKind ? `本地 · ${focusL.rel} · LibRPA ${localKind} 自旋 ${spin}${localIter !== null ? ` · 第 ${localIter} 次` : ''}` : '';
+      const pubLabel = item ? `已发表 · ${record.id} · ${item.label}` : '';
+      const window = compareWindow([localSeries, pubSeries].filter(Boolean), relative, pub && pub.gapEv);
+      const height = narrow ? 260 : 320;
+      const chart = (series, ticks, title) =>
+        h('div', { className: 'af-compare-plot' },
+          title ? h('div', { className: 'af-hint' }, title) : null,
+          h(BandChart, {
+            series,
+            ticks: ticks || [],
+            xMin: series[0].xs[0],
+            xMax: series[0].xs[series[0].xs.length - 1],
+            lo: window.lo,
+            hi: window.hi,
+            height,
+            ariaLabel: title || `${record.id} 能带对照`,
+          }));
+
+      let body;
+      if (published.loading || (loaded.local && loaded.local.loading && requests.length)) body = h(Loading, null, '取回已发表的能带表与本地能带…');
+      else if (published.error || (published.data && !published.data.ok)) body = h(Note, { tone: 'err' }, `已发表的能带表读不出来：${published.error || published.data.error}`);
+      else if (!pubSeries) body = h('div', { className: 'af-hint' }, '没有可画的已发表能带。');
+      else if (alignment && alignment.mode === 'same' && localSeries) body = chart([localSeries, pubSeries], localCh.kTicks, null);
+      else {
+        body = h('div', { className: 'af-compare-pair', 'data-narrow': narrow ? '' : undefined },
+          localSeries ? chart([localSeries], localCh.kTicks, localLabel) : h('div', { className: 'af-hint' }, focusL ? '本地没有对应的能带文件。' : '这个运行没有 LibRPA 阶段，没有本地曲线可对照。'),
+          chart([pubSeries], [], pubLabel));
+      }
+
+      const notes = [];
+      if (alignment) {
+        notes.push(alignment.mode === 'same'
+          ? ['info', 'k 路径相同（逐点一致，相对容差 1e-3）：画在同一坐标上。']
+          : ['warn', `不叠加：${alignment.reason}。两边分开画，各自的横轴是各自文件里的 k 路径长度；面板不插值、不重采样。`]);
+      }
+      if (pubSeries) {
+        notes.push(relative
+          ? ['info', `纵轴是 E − E_VBM：各自的价带顶由占据数确定（本地 ${fmtEv(localVbm)}，已发表 ${fmtEv(pub.vbmEv)}），与数据库图的约定相同。`]
+          : ['warn', '缺少一边的占据数，定不了价带顶：两边都按文件里的绝对能量画，零点不同，不能直接读差值。']);
+      }
+      if (localKind === 'QSGW' && item && item.quantity === 'GW') notes.push(['warn', '本地是 QSGW 的迭代结果，已发表的是 GW 表（方法见上表）：形状可以对照，数值差不全来自物理收敛。']);
+      if (pub && pub.invertedKpoints > 0) notes.push(['warn', `已发表的表里有 ${pub.invertedKpoints} 个 k 点的空带低于占据带，这些点不参与带边。`]);
+
+      return h(React.Fragment, null,
+        h('div', { className: 'af-controls' },
+          bandData.length > 1
+            ? h('span', { className: 'af-control' }, '已发表的表',
+                h(Seg, { label: '已发表的能带表', value: item ? item.url : null, options: bandData.map((b) => ({ value: b.url, label: `${b.quantity}${b.spin ? ` s${b.spin}` : ''}` })), onChange: setPickUrl }))
+            : null,
+          localKind ? h('span', { className: 'af-hint' }, `对照本地 LibRPA ${localKind}`) : null),
+        body,
+        alignment && alignment.mode === 'same' && localSeries
+          ? h('div', { className: 'af-legend' },
+              h('span', { className: 'af-legend-item' }, h(LineSwatch, { color: localSeries.color }), localLabel),
+              h('span', { className: 'af-legend-item' }, h(LineSwatch, { color: pubSeries.color, dash: pubSeries.dash }), pubLabel))
+          : null,
+        notes.length
+          ? h('div', { className: 'af-notes' }, notes.map(([tone, text], i) => h('div', { key: i }, h(Icon16, { name: tone === 'warn' ? 'warn' : 'info', size: 12 }), h('span', null, text))))
+          : null,
+      );
+    }
+
+    /**
+     * The ABACUS stage whose INPUT, STRU and KPT describe the run in a comparison: the SCF
+     * stage when there is one; else a producer on the branch the consumer read, one with a
+     * Monkhorst–Pack mesh first (that mesh is the run's sampling; a band path is not).
+     */
+    function pickFactsStage(run, bundles, lineage) {
+      const scf = pickScfStage(run, bundles, lineage);
+      if (scf) return scf;
+      const linked = new Set(Object.values(lineage).filter((l) => l && l.branch).map((l) => l.branch));
+      const candidates = run.stages.filter((s) => (s.role === 'producer' || s.role === 'coupled') && bundles[s.id] && bundles[s.id].abacus && bundles[s.id].abacus.stru);
+      const rank = (s) => (linked.has(s.branch) ? 0 : 2) + (bundles[s.id].abacus.kpt && bundles[s.id].abacus.kpt.mode === 'auto' ? 0 : 1);
+      candidates.sort((x, y) => rank(x) - rank(y) || compareStages(x, y));
+      return candidates[0] || null;
+    }
+
     /** The ABACUS stage whose SCF trace best represents the run (the branch the consumer read). */
     function pickScfStage(run, bundles, lineage) {
       const linked = new Set(Object.values(lineage).filter((l) => l && l.branch).map((l) => l.branch));
@@ -3516,10 +4367,71 @@ window.__ModuleLoader__.load({
     // =====================================================================
 
     const STAGE_TABS = {
-      producer: [['overview', '概览'], ['inputs', '输入'], ['scf', '收敛'], ['structure', '结构'], ['files', '文件']],
-      consumer: [['overview', '概览'], ['inputs', '输入'], ['qsgw', 'QSGW'], ['files', '文件']],
-      coupled: [['overview', '概览'], ['inputs', '输入'], ['scf', 'SCF'], ['qsgw', 'QSGW'], ['structure', '结构'], ['files', '文件']],
+      producer: [['overview', '概览'], ['diagnose', '诊断'], ['inputs', '输入'], ['scf', '收敛'], ['structure', '结构'], ['files', '文件']],
+      consumer: [['overview', '概览'], ['diagnose', '诊断'], ['inputs', '输入'], ['qsgw', 'QSGW'], ['files', '文件']],
+      coupled: [['overview', '概览'], ['diagnose', '诊断'], ['inputs', '输入'], ['scf', 'SCF'], ['qsgw', 'QSGW'], ['structure', '结构'], ['files', '文件']],
     };
+
+    /**
+     * "Why is this stage in this state?" — the host's diagnosis (lib/host/diagnose.js) as it
+     * comes: the verdict, the decisive log lines quoted with file and line, what the input
+     * asked for against what the output holds, absent files. Fetched when the tab opens.
+     */
+    function DiagnosisPane(props) {
+      const { stage, state, run, onHandoff } = props;
+      const diag = useApi(`diag:${stage.id}:${cacheGeneration}`, () => api(`/diagnose?id=${encodeURIComponent(stage.id)}`));
+      if (diag.loading) return h(Loading, null, '读取日志与输出，诊断这个阶段…');
+      if (diag.error) return h(Note, { tone: 'err' }, `诊断失败：${diag.error}`);
+      const d = diag.data;
+      if (!d || !d.verdict) return h(Note, { tone: 'warn' }, '诊断没有返回结果');
+      const handoff = () => onHandoff && onHandoff({
+        title: `诊断 ${stage.rel || stage.name}`,
+        text: buildDiagnosisMessage({ run, stage, state, diagnosis: d }),
+      });
+      return h(
+        React.Fragment,
+        null,
+        h('div', { className: 'af-verdict', 'data-tone': d.verdict.tone, role: 'status' },
+          h('span', { className: 'af-state', 'data-s': DIAGNOSIS_GLYPH[d.verdict.tone] || 'none' }, h(StateGlyph, { code: DIAGNOSIS_GLYPH[d.verdict.tone] || 'none', size: 14 })),
+          h('span', { className: 'af-verdict-text' }, d.verdict.text),
+          onHandoff ? h(Btn, { size: 'sm', icon: 'agent', onClick: handoff }, '交给 Agent…') : null),
+        h(Section, { title: '关键日志行', meta: d.lines.length ? '原文引用，注明文件与行号' : null },
+          d.lines.length === 0
+            ? h('div', { className: 'af-hint' }, '没有可引用的日志行：这个阶段没有可读的日志。')
+            : h('div', { className: 'af-diag-lines' },
+                d.lines.map((l, i) =>
+                  h('div', { key: `${l.file}:${l.line}:${i}`, className: 'af-diag-line', 'data-kind': l.kind },
+                    h('div', { className: 'af-diag-where' }, h('b', null, `${l.file}${l.line ? `:${l.line}` : ''}`), ` · ${l.why}`),
+                    h('pre', { className: 'af-diag-quote' }, l.text))))),
+        d.checks.length
+          ? h(Section, { title: '输入要求 vs 输出', meta: '“?” 表示本地没有：没有产出，或没有拉回' },
+              h('div', { className: 'af-table-wrap' },
+                h('table', { className: 'af-table' },
+                  h('thead', null, h('tr', null, h('th', null, ''), h('th', null, '要求'), h('th', null, '实际'))),
+                  h('tbody', null,
+                    d.checks.map((c, i) =>
+                      h('tr', { key: i },
+                        h('td', { style: { width: 20 } }, h(StateGlyph, { code: c.ok === true ? 'ok' : c.ok === false ? 'unconv' : 'none', size: 11 })),
+                        h('td', { className: 'af-mono', style: { overflowWrap: 'anywhere' } }, c.asked),
+                        // The note sits under what was found, so the table keeps three
+                        // columns and reads at dock width too.
+                        h('td', { style: { overflowWrap: 'anywhere' } }, c.found, c.note ? h('div', { className: 'af-hint' }, c.note) : null)))))))
+          : null,
+        d.missing.length
+          ? h(Section, { title: '缺少的文件', meta: `${d.missing.length} 项` },
+              h('div', { className: 'af-lib-rows' },
+                d.missing.map((m) =>
+                  h('div', { key: m.name, className: 'af-lib-row' },
+                    h('span', { className: 'af-lib-row-label af-mono' }, m.name),
+                    h('span', { className: 'af-kind' }, m.need === 'required' ? '必需' : '通常会有'),
+                    h('span', { className: 'af-hint' }, m.why)))))
+          : null,
+        d.notes.length
+          ? h('div', { className: 'af-notes', style: { marginTop: 'var(--af-s4)' } },
+              d.notes.map((n, i) => h('div', { key: i }, h(Icon16, { name: 'info', size: 12 }), h('span', null, n))))
+          : null,
+      );
+    }
 
     function StageOverview(props) {
       const { stage, bundle, state, link } = props;
@@ -3822,7 +4734,9 @@ window.__ModuleLoader__.load({
       const tabs = STAGE_TABS[stage.role] || STAGE_TABS.producer;
       const active = tabs.some(([id]) => id === tab) ? tab : 'overview';
       let content;
-      if (error) content = h(Note, { tone: 'err' }, error);
+      // The diagnosis reads its own files on the host, so it does not wait for the bundle.
+      if (active === 'diagnose') content = h(DiagnosisPane, { stage, state, run: props.run, onHandoff: props.onHandoff });
+      else if (error) content = h(Note, { tone: 'err' }, error);
       else if (!bundle) content = h(Loading, null, '读取这个阶段…');
       else if (active === 'inputs') content = h(InputsPane, { bundle });
       else if (active === 'scf') content = h(ScfPane, { bundle });
@@ -3841,7 +4755,11 @@ window.__ModuleLoader__.load({
             stage.role === 'coupled' ? h(ProducerTag, { producer: 'librpa' }) : null,
             h('span', { style: { font: 'var(--af-t-section)' } }, stage.rel || stage.name),
             h(StateBadge, { state }),
-            state && state.detail ? h('span', { className: 'af-hint' }, state.detail) : null),
+            state && state.detail ? h('span', { className: 'af-hint' }, state.detail) : null,
+            // Not converged, no output, an error: the question is "why", and the answer is a tab away.
+            state && state.code !== 'ok' && active !== 'diagnose'
+              ? h(Btn, { size: 'sm', kind: 'ghost', icon: 'search', onClick: () => onTab('diagnose') }, '为什么？')
+              : null),
           h('span', { className: 'af-path', title: stage.task.absPath }, tailPath(stage.task.absPath, 120)),
         ),
         h(
@@ -4187,13 +5105,24 @@ window.__ModuleLoader__.load({
      * point of the metadata-only index: 122 records cost 3.1 MB, and a plot costs 250 KB that
      * you asked for.
      */
+    /**
+     * A database record's upstream artefacts: its figures, the audits behind them, and the
+     * band tables.
+     *
+     * §3.1 root cause: the old view kept `figures.filter((f) => /\.png$/i.test(f.label))`,
+     * but a record's `label` is a caption ("GW occupation-separated frontier"); the format
+     * is only in the URL. So the 214 SVG figures never showed, and NiO's audit JSON was
+     * offered as if it were a plot. The host now reports each item's `kind` from its URL
+     * and its `quantity` from caption and file name (lib/host/library-assets.js), and
+     * `groupFigures` builds the tabs and cards from those.
+     *
+     * Nothing is downloaded until the record is expanded; a figure is a lazy <img> through
+     * the host proxy, an audit is fetched only when opened.
+     */
     function LibraryAssets(props) {
       const { id } = props;
       const assets = useApi(`assets:${id}`, () => api(`/library/assets?id=${encodeURIComponent(id)}`));
-      const [showFigure, setShowFigure] = useState(null);
-      const [curve, setCurve] = useState(null);
-      const [curveLoading, setCurveLoading] = useState(false);
-      const [curveError, setCurveError] = useState(null);
+      const [tab, setTab] = useState(null);
 
       if (assets.loading) return h('div', { className: 'af-hint' }, h(Spinner), '读取数据库资产目录…');
       if (assets.error) return h(Note, { tone: 'err' }, String(assets.error));
@@ -4202,199 +5131,148 @@ window.__ModuleLoader__.load({
         return h(Note, { tone: 'warn' }, `数据库资产不可用：${(data && data.error) || '未配置'}`);
       }
 
-      const figures = data.figures || [];
+      const audits = data.audits || [];
       const bandData = data.bandData || [];
-      if (figures.length === 0 && bandData.length === 0) {
-        return h('div', { className: 'af-hint' }, '这条记录没有上传图或能带数据。');
-      }
-
-      const pngs = figures.filter((f) => /\.png$/i.test(f.label));
-      const chosen = showFigure ?? (pngs[0] ? pngs[0].label : null);
-      const activeFigure = figures.find((f) => f.label === chosen) || pngs[0] || null;
-
-      const loadCurve = (item) => {
-        setCurveLoading(true);
-        setCurveError(null);
-        // Fetched through the host proxy so the browser never talks to the mirror directly.
-        fetch(`/abacusflow/api/library/asset?url=${encodeURIComponent(item.url)}`)
-          .then((response) => {
-            if (!response.ok) throw new Error(`${response.status}`);
-            return response.text();
-          })
-          .then((text) => {
-            const parsed = parsePublishedBandCurve(text);
-            if (!parsed.rows.length) {
-              setCurveError('这个文件里没有可识别的 k/能量列');
-              setCurve(null);
-            } else {
-              setCurve({ label: item.label, ...parsed });
-            }
-            setCurveLoading(false);
-          })
-          .catch((error) => {
-            setCurveError(String(error.message || error));
-            setCurveLoading(false);
-          });
-      };
+      const { tabs, defaultKey } = groupFigures(data.figures || []);
+      const active = tabs.find((t) => t.key === tab) || tabs.find((t) => t.key === defaultKey) || null;
 
       return h(
         'div',
         { className: 'af-lib-assets' },
-        figures.length > 0
-          ? h(
-              'div',
-              { className: 'af-lib-figure' },
-              h(
-                'div',
-                { className: 'af-lib-assets-head' },
-                h('span', null, '已发表图'),
-                pngs.length > 1
-                  ? h(
-                      'span',
-                      { className: 'af-seg' },
-                      pngs.map((f) =>
-                        h(
-                          'button',
-                          {
-                            key: f.label,
-                            type: 'button',
-                            className: 'af-toggle',
-                            'aria-pressed': activeFigure && f.label === activeFigure.label ? 'true' : 'false',
-                            onClick: () => setShowFigure(f.label),
-                          },
-                          f.label.replace(/^.*_/, '').replace(/\.png$/i, ''),
-                        ),
-                      ),
-                    )
-                  : null,
-              ),
-              activeFigure
-                ? h('img', {
-                    className: 'af-lib-img',
-                    src: `/abacusflow/api/library/asset?url=${encodeURIComponent(activeFigure.url)}`,
-                    alt: `${data.id} ${activeFigure.label}`,
-                    loading: 'lazy',
-                  })
-                : null,
-              h('div', { className: 'af-hint' },
-                '图由数据库上游按需取回（不下载整库）。基组、k 网格与程序版本可能与你本地运行不同，仅作参照。'),
-            )
+        h('div', null,
+          h('div', { className: 'af-lib-assets-head' },
+            h('span', null, tabs.length ? `已发表图 · ${tabs.reduce((n, t) => n + t.cards.length, 0)} 张` : '已发表图'),
+            tabs.length > 1
+              ? h('span', { className: 'af-seg', role: 'group', 'aria-label': '按物理量' },
+                  tabs.map((t) =>
+                    h('button', {
+                      key: t.key,
+                      type: 'button',
+                      'data-active': active && t.key === active.key ? '' : undefined,
+                      'aria-pressed': active && t.key === active.key ? 'true' : 'false',
+                      onClick: () => setTab(t.key),
+                    }, t.cards.length > 1 ? `${t.label} ${t.cards.length}` : t.label)))
+              : null),
+          active
+            ? h('div', { className: 'af-lib-figs', 'data-single': active.cards.length === 1 ? '' : undefined },
+                active.cards.map((card) => h(LibraryFigure, { key: card.key, card, recordId: data.id })))
+            : h('div', { className: 'af-hint' }, '这条记录没有上传图。'),
+          active
+            ? h('div', { className: 'af-hint', style: { marginTop: 'var(--af-s2)' } },
+                '图由数据库上游按需取回（不下载整库）。基组、k 网格与程序版本可能与你的运行不同，仅作参照。')
+            : null),
+        audits.length > 0
+          ? h(Section, { title: '图的审计与来源', meta: `${audits.length} 个 JSON · 不是图，是图的出处与映射`, collapsible: true, defaultOpen: false },
+              audits.map((item) => h(LibraryAudit, { key: item.url || item.label, item })))
           : null,
         bandData.length > 0
-          ? h(
-              'div',
-              { className: 'af-lib-curves' },
-              h(
-                'div',
-                { className: 'af-lib-assets-head' },
-                h('span', null, '能带数据'),
-                h(
-                  'span',
-                  { className: 'af-seg' },
-                  bandData.map((item) =>
-                    h(
-                      'button',
-                      {
-                        key: item.label,
-                        type: 'button',
-                        className: 'af-toggle',
-                        onClick: () => loadCurve(item),
-                      },
-                      item.label.replace(/^.*_/, '').replace(/\.dat$/i, ''),
-                    ),
-                  ),
-                ),
-              ),
-              curveLoading ? h('div', { className: 'af-hint' }, h(Spinner), '取回并解析曲线…') : null,
-              curveError ? h(Note, { tone: 'err' }, `解析失败：${curveError}`) : null,
-              curve
-                ? h(PublishedBandChart, { curve, height: 300 })
-                : h('div', { className: 'af-hint' }, '点上面的按钮，按需取回该条记录的能带数据并画出曲线。'),
-            )
+          ? h(Section, { title: '能带数据', meta: `${bandData.length} 个表 · LibRPA 格式（k 点 + 占据/能量）`, collapsible: true, defaultOpen: false },
+              h('div', { className: 'af-lib-rows' },
+                bandData.map((item) =>
+                  h('div', { key: item.url || item.label, className: 'af-lib-row' },
+                    h('span', { className: 'af-lib-row-label' }, item.label),
+                    h('span', { className: 'af-kind' }, `${item.quantity}${item.spin ? ` · 自旋 ${item.spin}` : ''}`),
+                    item.sizeBytes ? h('span', { className: 'af-kind' }, fmtBytes(item.sizeBytes)) : null,
+                    h(ExternalLink, { url: item.url }, '原文件')))))
           : null,
       );
     }
 
-    /**
-     * Parse a published database band file.
-     *
-     * The published `*_KS/EXX/GW.dat` files are whitespace tables whose first column is a
-     * k index or path coordinate and whose remaining columns are energies; some carry a
-     * header line. This accepts the shape it can prove and says so when it cannot, rather
-     * than plotting a wrong column silently.
-     *
-     * @param {string} text
-     * @returns {{ columns:number, rows:number[][], kIndex:number[] }}
-     */
-    function parsePublishedBandCurve(text) {
-      const rows = [];
-      for (const raw of String(text ?? '').split(/\r?\n/)) {
-        const line = raw.trim();
-        if (line === '' || line.startsWith('#') || line.startsWith('!')) continue;
-        const values = line.split(/\s+|,/).filter(Boolean).map(Number);
-        if (values.length < 2 || values.some((v) => !Number.isFinite(v))) continue;
-        rows.push(values);
-      }
-      if (rows.length === 0) return { columns: 0, rows: [] };
-      // Every row must have the same width or the columns mean different things per row.
-      const width = rows[0].length;
-      if (rows.some((r) => r.length !== width)) return { columns: 0, rows: [] };
-      return { columns: width, rows };
+    /** A link to the dataset mirror, opened outside the panel; nothing when the URL was refused. */
+    function ExternalLink(props) {
+      if (!props.url) return h('span', { className: 'af-kind', title: '记录里的地址不是 https 的数据库镜像，面板不打开它' }, '地址未通过校验');
+      return h('a', { className: 'af-ext', href: props.url, target: '_blank', rel: 'noopener noreferrer' }, `${props.children} ↗`);
     }
 
-    /** Draw a published band curve: k (column 0) against every energy column. */
-    function PublishedBandChart(props) {
-      const { curve, height } = props;
-      const rows = curve.rows || [];
-      if (rows.length < 2) return h('div', { className: 'af-empty' }, '曲线数据不足');
-      const kValues = rows.map((r) => r[0]);
-      const energies = rows.map((r) => r.slice(1));
-      const nBand = energies[0].length;
-      const flat = energies.flat().filter(Number.isFinite);
-      const eMin = Math.min(...flat);
-      const eMax = Math.max(...flat);
-      const h4 = height || 300;
-      const width = 760;
-      const padL = 56;
-      const padR = 12;
-      const padT = 10;
-      const padB = 26;
-      const kMin = Math.min(...kValues);
-      const kMax = Math.max(...kValues);
-      const sx = (k) => padL + ((k - kMin) / (kMax - kMin || 1)) * (width - padL - padR);
-      const sy = (e) => padT + (1 - (e - eMin) / (eMax - eMin || 1)) * (h4 - padT - padB);
-      const paths = [];
-      for (let band = 0; band < nBand; band += 1) {
-        let d = '';
-        let started = false;
-        for (let i = 0; i < rows.length; i += 1) {
-          const e = energies[i][band];
-          if (!Number.isFinite(e)) {
-            started = false;
-            continue;
-          }
-          d += `${started ? 'L' : 'M'}${sx(kValues[i]).toFixed(2)},${sy(e).toFixed(2)} `;
-          started = true;
-        }
-        if (d.trim() === '') continue;
-        paths.push(h('path', { key: `b${band}`, d, fill: 'none', stroke: 'var(--af-brand)', strokeWidth: 1.1, opacity: 0.9 }));
+    /** One published plot: the image (SVG/PNG) on its paper, its caption, the PDF beside it. */
+    function LibraryFigure(props) {
+      const { card, recordId } = props;
+      const [failed, setFailed] = useState(false);
+      const image = card.image;
+      let frame;
+      if (image && image.url && !failed) {
+        frame = h('div', { className: 'af-lib-frame' },
+          h('img', {
+            className: 'af-lib-img',
+            src: `${API}/library/asset?url=${encodeURIComponent(image.url)}`,
+            alt: `${recordId} · ${card.caption}`,
+            loading: 'lazy',
+            onError: () => setFailed(true),
+          }));
+      } else {
+        const why = image && !image.url ? '图的地址没有通过校验，面板不取它。'
+          : failed ? '图没能取回（上游或缓存出错）。可以用下面的链接直接打开。'
+            : card.pdf ? '这张图只有 PDF 版本，面板里不内嵌，用链接打开。'
+              : '这个格式面板里不显示，用链接打开。';
+        frame = h('div', { className: 'af-lib-frame', 'data-placeholder': '' }, why);
       }
-      return h(
-        'div',
-        null,
-        h(
-          'svg',
-          { className: 'af-chart', viewBox: `0 0 ${width} ${h4}`, preserveAspectRatio: 'none', style: { height: `${h4}px` } },
-          h('line', { className: 'af-axis', x1: padL, x2: width - padR, y1: h4 - padB, y2: h4 - padB }),
-          h('line', { className: 'af-axis', x1: padL, x2: padL, y1: padT, y2: h4 - padB }),
-          h('text', { x: 4, y: padT + 9 }, 'eV'),
-          h('text', { x: padL - 5, y: h4 - padB + 3, textAnchor: 'end' }, eMin.toFixed(1)),
-          h('text', { x: padL - 5, y: padT + 9, textAnchor: 'end' }, eMax.toFixed(1)),
-          paths,
-        ),
-        h('div', { className: 'af-hint' },
-          `${curve.label} · ${rows.length} 行 × ${nBand} 条能量列（第 1 列作为 k）· 纵轴不重设零点，保持数据库原值`),
-      );
+      const kinds = [image && image.kind, card.pdf && 'pdf', ...card.files.map((f) => f.kind)].filter(Boolean);
+      return h('figure', { className: 'af-lib-fig' },
+        frame,
+        h('figcaption', { className: 'af-lib-cap' },
+          h('span', { className: 'af-lib-cap-text' }, card.caption),
+          h('span', { className: 'af-kind' }, kinds.map((k) => k.toUpperCase()).join(' + ')),
+          card.pdf ? h(ExternalLink, { url: card.pdf.url }, 'PDF') : null,
+          image ? h(ExternalLink, { url: image.url }, '原图') : null,
+          card.files.map((f) => h(ExternalLink, { key: f.url || f.label, url: f.url }, f.kind.toUpperCase()))));
+    }
+
+    /** An audit JSON: caption and size; its outline is fetched only when asked for. */
+    function LibraryAudit(props) {
+      const { item } = props;
+      const [state, setState] = useState({ phase: 'idle' });
+      const [raw, setRaw] = useState(false);
+      const load = () => {
+        setState({ phase: 'loading' });
+        fetch(`${API}/library/asset?url=${encodeURIComponent(item.url)}`)
+          .then((response) => (response.ok ? response.json() : response.json().then((body) => Promise.reject(new Error(body.error || `HTTP ${response.status}`)))))
+          .then((value) => setState({ phase: 'ready', value }), (error) => setState({ phase: 'error', error: String(error.message || error) }));
+      };
+      let body = null;
+      if (state.phase === 'loading') body = h('div', { className: 'af-hint' }, h(Spinner), `取回 ${fmtBytes(item.sizeBytes) || ''}…`);
+      else if (state.phase === 'error') body = h(Note, { tone: 'err' }, `没能读取：${state.error}`);
+      else if (state.phase === 'ready') {
+        const text = raw ? JSON.stringify(state.value, null, 2) : '';
+        body = h('div', null,
+          h('div', { className: 'af-controls', style: { marginBottom: 'var(--af-s2)' } },
+            h('span', { className: 'af-seg' },
+              h('button', { type: 'button', 'data-active': raw ? undefined : '', onClick: () => setRaw(false) }, '结构'),
+              h('button', { type: 'button', 'data-active': raw ? '' : undefined, onClick: () => setRaw(true) }, '原文'))),
+          raw
+            ? h('pre', { className: 'af-pre' }, text.length > 60000 ? `${text.slice(0, 60000)}\n… 只显示前 60 000 个字符（共 ${text.length}）；完整内容见原文件` : text)
+            : h(JsonTree, { value: state.value, depth: 0 }));
+      }
+      return h('div', { className: 'af-lib-row', style: { flexDirection: 'column', alignItems: 'stretch' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px var(--af-s2)' } },
+          h('span', { className: 'af-lib-row-label' }, item.label),
+          h('span', { className: 'af-kind' }, `JSON${item.sizeBytes ? ` · ${fmtBytes(item.sizeBytes)}` : ''}`),
+          item.url && state.phase !== 'ready' && state.phase !== 'loading'
+            ? h(Btn, { size: 'sm', kind: 'ghost', onClick: load }, '展开结构')
+            : null,
+          h(ExternalLink, { url: item.url }, '原文件')),
+        body);
+    }
+
+    /** A JSON value one level at a time; objects and arrays open on click. */
+    function JsonTree(props) {
+      const { value, depth } = props;
+      const [open, setOpen] = useState({});
+      const { entries, more } = jsonOutline(value);
+      return h('div', { className: 'af-json' },
+        entries.map((entry) => {
+          const isOpen = Boolean(open[entry.key]);
+          const label = [
+            h('span', { key: 'k', className: 'af-json-key' }, `${entry.expandable ? (isOpen ? '▾' : '▸') : ' '} ${entry.key}`),
+            h('span', { key: 't', className: 'af-json-type' }, entry.type === 'array' || entry.type === 'object' ? entry.type : ''),
+            h('span', { key: 'v', className: 'af-json-val', title: entry.preview }, entry.preview),
+          ];
+          return h(React.Fragment, { key: entry.key },
+            entry.expandable
+              ? h('button', { type: 'button', className: 'af-json-row', 'aria-expanded': isOpen ? 'true' : 'false', onClick: () => setOpen({ ...open, [entry.key]: !isOpen }) }, label)
+              : h('div', { className: 'af-json-row' }, label),
+            isOpen && depth < 12 ? h('div', { className: 'af-json-kids' }, h(JsonTree, { value: value[entry.key], depth: depth + 1 })) : null);
+        }),
+        more > 0 ? h('div', { className: 'af-json-row af-json-type' }, `… 另有 ${more} 项`) : null);
     }
 
     function LibraryRecord(props) {
@@ -4584,7 +5462,34 @@ window.__ModuleLoader__.load({
         h('div', { className: 'af-ask-row' },
           h('span', { className: 'af-hint', style: { flex: 1, minWidth: 0 } }, '发送前可以直接修改。消息只是请求：Agent 在提交作业或改输入前会先问你。'),
           edited ? h(Btn, { size: 'sm', kind: 'ghost', onClick: () => { setDraft(composed); setEdited(false); } }, '恢复生成稿') : null,
-          h(Btn, { kind: 'primary', icon: 'send', onClick: () => onSend(draft), disabled: !draft.trim() }, '发送到对话')),
+          h(Btn, { kind: 'primary', icon: props.sendLabel === '复制消息' ? 'copy' : 'send', onClick: () => onSend(draft), disabled: !draft.trim() }, props.sendLabel || '发送到对话')),
+      );
+    }
+
+    /**
+     * A message composed on the page (a stage diagnosis), shown in full before it is sent:
+     * the user reads it, may edit it, and sends or drops it. Nothing goes out unseen.
+     */
+    function DraftSheet(props) {
+      const { draft, onSend, onCancel } = props;
+      const [text, setText] = useState(draft.text);
+      return h(
+        'div',
+        { className: 'af-handoff' },
+        h('div', { className: 'af-agent-head' },
+          h('span', { className: 'af-agent-label' }, '交给 Agent'),
+          h('span', { className: 'af-agent-ctx', title: draft.title }, draft.title)),
+        h('textarea', {
+          className: 'af-textarea',
+          value: text,
+          'aria-label': '将要发送的消息',
+          onChange: (event) => setText(event.target.value),
+        }),
+        h('div', { className: 'af-ask-row' },
+          h('span', { className: 'af-hint', style: { flex: 1, minWidth: 0 } }, '诊断原样附上，发送前可以修改。Agent 在提交作业或改输入前会先问你。'),
+          text !== draft.text ? h(Btn, { size: 'sm', kind: 'ghost', onClick: () => setText(draft.text) }, '恢复原稿') : null,
+          h(Btn, { size: 'sm', kind: 'ghost', onClick: onCancel }, '取消'),
+          h(Btn, { kind: 'primary', icon: props.sendLabel === '复制消息' ? 'copy' : 'send', onClick: () => onSend(text), disabled: !text.trim() }, props.sendLabel || '发送到对话')),
       );
     }
 
@@ -4593,39 +5498,80 @@ window.__ModuleLoader__.load({
      * the focused stage's path and state, and the run-level handoff sheet.
      */
     function AgentDock(props) {
-      const { session, context, handoff } = props;
+      const { context, handoff } = props;
+      const link = props.sessionLink || { ok: false, reason: '面板没有拿到会话信息。' };
       const [text, setText] = useState('');
-      const [status, setStatus] = useState(null);
       const [open, setOpen] = useState(false);
+      // Recent submissions, newest last. A rejection can arrive long after the send (a queued
+      // message withdrawn), so each keeps its own state and the status line looks at all.
+      const [subs, setSubs] = useState([]);
+      const [notice, setNotice] = useState(null);
+      const seq = useRef(0);
       const timer = useRef(null);
       useEffect(() => () => clearTimeout(timer.current), []);
+      // A draft from the page replaces the run-level sheet: one composed message at a time.
+      const draftId = props.draft ? props.draft.id : null;
+      useEffect(() => {
+        if (draftId !== null) setOpen(false);
+      }, [draftId]);
       if (!context) return null;
 
-      const post = (message) => {
-        // `askAgent` now reports how it ended: submitted through the session, preloaded into
-        // the composer, or failed outright. Saying "已发送" for a submission the Host later
-        // rejects is worse than saying nothing, so the outcome callback updates the label.
-        const result = askAgent(session, message, (outcome, detail) => {
-          if (outcome === 'failed') {
-            setStatus(detail || 'Host 拒绝了这条消息');
-            clearTimeout(timer.current);
-            timer.current = setTimeout(() => setStatus(null), 8000);
+      const flash = (message, tone) => {
+        setNotice({ message, tone });
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => setNotice(null), 6000);
+      };
+      const post = (message, after) => {
+        if (!link.ok) {
+          // Never silent: say why nothing was sent, and keep the text for the user to paste.
+          copyText(message).then((copied) =>
+            flash(copied ? `没有发送：${link.reason} 消息已复制，可以粘贴到对话里。` : `没有发送：${link.reason}`, 'warn'));
+          return;
+        }
+        seq.current += 1;
+        const id = seq.current;
+        const preview = message.replace(/\s+/g, ' ').slice(0, 18);
+        setNotice(null);
+        // A rejection already on screen has been seen; a new send replaces it.
+        setSubs((list) => [...list.filter((s) => s.state.phase !== 'rejected').slice(-3), { id, preview, state: { phase: 'idle' } }]);
+        let cleared = false;
+        postToSession(link.session, message, (event) => {
+          setSubs((list) => list.map((s) => (s.id === id ? { ...s, state: submissionStep(s.state, event) } : s)));
+          if (!cleared && (event.type === 'accepted' || event.type === 'observed')) {
+            cleared = true;
+            if (after) after();
           }
         });
-        if (result === 'submitted') setStatus('已发送到对话');
-        else if (result === 'prefilled') setStatus('已填进对话输入框，确认后发送');
-        else setStatus('没能送入对话：请复制后粘贴');
-        if (result !== 'failed') {
-          clearTimeout(timer.current);
-          timer.current = setTimeout(() => setStatus(null), 4000);
-        }
-        return result === 'submitted';
       };
       const ask = (value) => {
         const question = String(value ?? text).trim();
         if (!question) return;
-        if (post(`${context.prefix}${question}`)) setText('');
+        post(`${context.prefix}${question}`, value === undefined ? () => setText('') : null);
       };
+
+      // What the status line says: a rejection wins (it may belong to an earlier message),
+      // then the newest submission while it is in flight, then where messages go.
+      const rejected = [...subs].reverse().find((s) => s.state.phase === 'rejected');
+      const latest = subs[subs.length - 1];
+      let statusText;
+      let tone = '';
+      if (notice) {
+        statusText = notice.message;
+        tone = notice.tone;
+      } else if (rejected) {
+        statusText = `${rejected === latest ? '' : `「${rejected.preview}…」`}${submissionLabel(rejected.state, link.title)}`;
+        tone = 'warn';
+      } else if (latest && latest.state.phase !== 'idle') {
+        statusText = submissionLabel(latest.state, link.title);
+        tone = latest.state.phase === 'sending' ? '' : 'ok';
+      } else if (link.ok) {
+        statusText = `发往${link.title ? `「${link.title}」` : '当前对话'} · 面板只读，计算由 Agent 执行`;
+      } else {
+        statusText = `无法发送：${link.reason}`;
+        tone = 'warn';
+      }
+      const status = h('span', { className: 'af-agent-status', 'data-tone': tone || undefined, role: 'status', title: statusText }, statusText);
+      const sendLabel = link.ok ? '发送' : '复制';
 
       return h(
         'div',
@@ -4633,9 +5579,17 @@ window.__ModuleLoader__.load({
         open && handoff
           ? h(HandoffSheet, {
               handoff,
-              onSend: (message) => {
-                if (post(message)) setOpen(false);
-              },
+              sendLabel: link.ok ? '发送到对话' : '复制消息',
+              onSend: (message) => post(message, () => setOpen(false)),
+            })
+          : null,
+        props.draft && !open
+          ? h(DraftSheet, {
+              key: props.draft.id,
+              draft: props.draft,
+              sendLabel: link.ok ? '发送到对话' : '复制消息',
+              onCancel: props.onDraftDone,
+              onSend: (message) => post(message, props.onDraftDone),
             })
           : null,
         h('div', { className: 'af-agent-head' },
@@ -4647,19 +5601,19 @@ window.__ModuleLoader__.load({
         h('div', { className: 'af-ask-row' },
           h('input', {
             className: 'af-input af-input-text',
-            placeholder: '提问会附带路径与状态，发到当前对话…',
+            placeholder: link.ok ? '提问会附带路径与状态，发到当前对话…' : '提问会附带路径与状态（现在发不出去，见下方原因）',
             value: text,
             onChange: (event) => setText(event.target.value),
             onKeyDown: (event) => {
               if (event.key === 'Enter') ask();
             },
           }),
-          h(Btn, { kind: 'primary', icon: 'send', onClick: () => ask(), disabled: !text.trim() }, '发送')),
+          h(Btn, { kind: 'primary', icon: link.ok ? 'send' : 'copy', onClick: () => ask(), disabled: !text.trim() }, sendLabel)),
         h('div', { className: 'af-ask-quick' },
           (context.quick || []).map((q) => h(Btn, { key: q, size: 'sm', onClick: () => ask(q) }, q)),
-          props.narrow ? null : h('span', { className: 'af-agent-status' }, status || '面板只读 · 计算由对话里的 Agent 执行')),
-        // Narrow: the prompts scroll sideways, so the read-only statement gets its own line.
-        props.narrow ? h('div', { className: 'af-agent-foot' }, status || '面板只读 · 计算由对话里的 Agent 执行') : null,
+          props.narrow ? null : status),
+        // Narrow: the prompts scroll sideways, so the status gets its own line.
+        props.narrow ? h('div', { className: 'af-agent-foot' }, status) : null,
       );
     }
 
@@ -4667,7 +5621,7 @@ window.__ModuleLoader__.load({
     // the run page
     // =====================================================================
 
-    const STAGE_TAB_LABEL = { overview: '概览', inputs: '输入', scf: '收敛', qsgw: 'QSGW', structure: '结构', files: '文件' };
+    const STAGE_TAB_LABEL = { overview: '概览', diagnose: '诊断', inputs: '输入', scf: '收敛', qsgw: 'QSGW', structure: '结构', files: '文件' };
 
     function quickPrompts(states) {
       const codes = new Set(Object.values(states).map((s) => s.code));
@@ -4684,7 +5638,7 @@ window.__ModuleLoader__.load({
      * after scrolling past everything, because that element is the scroller).
      */
     function RunScope(props) {
-      const { run, ui, setUi, session, narrow, series, onOpenSeries, onOpenLibrary } = props;
+      const { run, ui, setUi, sessionLink, narrow, series, onOpenSeries, onOpenLibrary } = props;
       // Poll only while some stage of this run is reported as running.
       const [polling, setPolling] = useState(false);
       const tick = useVisibleTick(10000, polling);
@@ -4709,6 +5663,9 @@ window.__ModuleLoader__.load({
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [stateKey]);
       const [proofs, setProofs] = useState({});
+      // A message composed elsewhere on the page (a stage diagnosis) waiting in the dock for
+      // the user to read, edit and send.
+      const [draft, setDraft] = useState(null);
       const [plotted, setPlotted] = useState([]);
       const [bandIterations, setBandIterations] = useState([]);
       const [iteration, setIteration] = useState(null);
@@ -4826,6 +5783,18 @@ window.__ModuleLoader__.load({
             persistKey: 'results-keynumbers',
           },
             h(KeyNumbers, { run, bundles, iteration, onOpenLibrary, onSelectStage: (id) => selectStage(id) })),
+          // Only when the database has a candidate: the comparison is about a record, and an
+          // empty section would be one more thing to open for nothing.
+          matches.length > 0
+            ? h(Section, {
+                title: '与已发表记录对照',
+                meta: '能隙、可比性与能带；不同之处逐项注明',
+                collapsible: true,
+                defaultOpen: false,
+                persistKey: 'results-published',
+              },
+                h(PublishedComparison, { run, bundles, lineage, ledger, matches, focusL, iteration, narrow }))
+            : null,
           h(Section, {
             title: '收敛',
             meta: 'ABACUS SCF 与 LibRPA QSGW 分开看',
@@ -4848,6 +5817,7 @@ window.__ModuleLoader__.load({
         view === 'stage' && stage
           ? h(StageView, {
               stage,
+              run,
               bundle: bundles[stage.id],
               state: states[stage.id],
               link: lineage[stage.id],
@@ -4855,6 +5825,7 @@ window.__ModuleLoader__.load({
               onTab: (tab) => setUi({ stageTab: tab }),
               error: loaded.errors[stage.id],
               iteration,
+              onHandoff: (draft) => setDraft({ ...draft, id: Date.now() }),
             })
           : null,
       );
@@ -4863,7 +5834,7 @@ window.__ModuleLoader__.load({
         React.Fragment,
         null,
         h('div', { className: 'af-content-scroll' }, page),
-        h(AgentDock, { session, context, handoff, narrow }),
+        h(AgentDock, { sessionLink, context, handoff, narrow, draft, onDraftDone: () => setDraft(null) }),
       );
     }
 
@@ -4926,7 +5897,7 @@ window.__ModuleLoader__.load({
     }
 
     function Panel(props) {
-      const session = props.session || null;
+      const sessionLink = props.sessionLink || null;
       const [rootRef, width] = useWidth(props.compact ? 400 : 1100);
       const narrow = width > 0 ? width < 760 : Boolean(props.compact);
       const [root, setRoot] = useState(readStoredRoot());
@@ -5180,7 +6151,7 @@ window.__ModuleLoader__.load({
           run: activeRun,
           ui,
           setUi,
-          session,
+          sessionLink,
           narrow,
           series: seriesOfRun,
           onOpenSeries: openSeries,
@@ -5210,52 +6181,102 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function PanelRoot(props) {
-      // The panel needs the live session to post questions into it.
-      //
-      // The correct accessor is `sessions.binding(id).session`, which is the `ISession` face
-      // (`beginSubmission`, `prompt`, `cancel`, …). An earlier version used
-      // `sessions.scope(id).get('session')`: `scope()` returns an *AgentContext*, which has
-      // no `session` service, so the lookup always failed and the send button did nothing.
-      const sessionId = props && props.sessionId;
-      const [session, setSession] = React.useState(null);
+    // ------------------------------------------------------ ask-box session ---
 
-      React.useEffect(() => {
-        setSession(null);
-        if (!sessionId) return undefined;
-        const sessions = pluginContext && pluginContext.get ? pluginContext.get('sessions') : undefined;
-        if (!sessions || typeof sessions.binding !== 'function') {
-          console.warn('[abacusflow] sessions service unavailable; the ask box will fall back to composer prefill');
-          return undefined;
-        }
-        let cancelled = false;
-        const read = () => {
-          try {
-            const binding = sessions.binding(sessionId);
-            if (!cancelled && binding && binding.session) {
-              setSession(binding.session);
-              return true;
-            }
-          } catch (error) {
-            console.error('[abacusflow] session binding lookup failed:', error);
-          }
-          return false;
-        };
-        // The binding exists only while the session is retained (an open tab); retry briefly
-        // on first mount, then give up and let the ask box fall back to prefill.
-        if (read()) return undefined;
+    /** `ctx.get('sessions')` when it has the parts the ask box needs, else undefined. */
+    function readSessionService() {
+      try {
+        const service = pluginContext && typeof pluginContext.get === 'function' ? pluginContext.get('sessions') : undefined;
+        return service && service.list && typeof service.list.getSnapshot === 'function' && typeof service.list.subscribe === 'function' && typeof service.binding === 'function'
+          ? service
+          : undefined;
+      } catch (error) {
+        console.info("[abacusflow] ask box: ctx.get('sessions') threw", error);
+        return undefined;
+      }
+    }
+
+    /** The session service; DSH's own plugins may register it after this one applies. */
+    function useSessionService() {
+      const [service, setService] = useState(readSessionService);
+      useEffect(() => {
+        if (service) return undefined;
         let attempts = 0;
         const timer = setInterval(() => {
           attempts += 1;
-          if (read() || attempts > 20) clearInterval(timer);
+          const found = readSessionService();
+          if (found) setService(() => found);
+          if (found || attempts >= 40) clearInterval(timer);
         }, 500);
-        return () => {
-          cancelled = true;
-          clearInterval(timer);
-        };
-      }, [sessionId]);
+        return () => clearInterval(timer);
+      }, [service]);
+      return service;
+    }
 
-      return h(Boundary, null, h(Panel, { ...(props || {}), session }));
+    const NO_SESSION_LIST = Object.freeze({ byId: Object.freeze({}) });
+
+    /**
+     * The session the ask box posts into, and the reason when there is none.
+     *
+     * §3.2 root cause, part 1: DSH passes `sessionId` only to session-scoped slots. The right
+     * dock (`sidebar.right.pane.tab`) gets it; the global `main` slot does not — its props
+     * are the standard hooks (`useSessions`, `usePanelInfo`, …) and nothing else. The old
+     * PanelRoot read `props.sessionId`, found nothing on the main page and stopped there.
+     * The id now comes from the Client's session service: the session the workspace retains
+     * as `mainView` (`mainViewSessionId`), unless the slot handed one over. The list is
+     * subscribed, so switching conversations while the panel is open retargets the ask box,
+     * and the binding is re-read on every list change (a retain publishes one).
+     *
+     * Each resolution is logged once with `console.info`, naming every accessor tried and
+     * what it returned, so a failure in a live DSH can be read off the devtools console.
+     */
+    function useSessionLink(slot, propSessionId, hookProps) {
+      const service = useSessionService();
+      const subscribe = useCallback((notify) => (service ? service.list.subscribe(notify) : () => {}), [service]);
+      const read = useCallback(() => (service ? service.list.getSnapshot() || NO_SESSION_LIST : NO_SESSION_LIST), [service]);
+      const list = React.useSyncExternalStore(subscribe, read, read);
+      const mainViewId = mainViewSessionId(list);
+      const sessionId = propSessionId || mainViewId;
+      const row = sessionId && list.byId ? list.byId[sessionId] : undefined;
+      let binding;
+      let bindingError = null;
+      if (service && sessionId) {
+        try {
+          binding = service.binding(sessionId);
+        } catch (error) {
+          bindingError = error;
+        }
+      }
+      const session = binding && binding.session ? binding.session : null;
+      const link = describeSessionLink({
+        slot,
+        propSessionId,
+        service: Boolean(service),
+        mainViewId,
+        listPhase: list.phase,
+        title: row && typeof row.title === 'string' && row.title.trim() ? row.title.trim() : undefined,
+        bound: Boolean(session),
+        promptable: Boolean(session && typeof session.beginSubmission === 'function' && typeof session.prompt === 'function'),
+      });
+      const traceKey = [slot, propSessionId, Boolean(service), mainViewId, Boolean(session), link.ok, link.reason].join('|');
+      useEffect(() => {
+        console.info(`[abacusflow] ask box (${slot}): ${link.ok ? `posts into session ${link.sessionId}` : `cannot post — ${link.reason}`}`, {
+          tried: link.accessor,
+          'props.sessionId': propSessionId ?? null,
+          'props.useSessions': typeof (hookProps && hookProps.useSessions),
+          "ctx.get('sessions')": service ? 'ISessions' : 'undefined (or without list/binding)',
+          'sessions.list phase': list.phase ?? null,
+          'sessions.list → retainedBy.mainView': mainViewId ?? null,
+          'sessions.binding(id)': bindingError ? `threw: ${bindingError.message || bindingError}` : binding ? (session ? 'SessionBinding' : 'binding without session') : 'undefined',
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [traceKey]);
+      return { ...link, slot, session: link.ok ? session : null };
+    }
+
+    function PanelRoot(props) {
+      const link = useSessionLink(props.slot, props.sessionId, props);
+      return h(Boundary, null, h(Panel, { compact: props.compact, sessionLink: link }));
     }
 
     // =====================================================================
@@ -5330,7 +6351,8 @@ window.__ModuleLoader__.load({
         try {
           ctx.slots.inject('main', () =>
             ctx.slots.register({ name: 'main', key: PANEL_KEY }, function AbacusFlowPage(props) {
-              return h(PanelRoot, { sessionId: props && props.sessionId });
+              // The main slot is root-scoped: no `sessionId` here (see useSessionLink).
+              return h(PanelRoot, { slot: 'main', useSessions: props && props.useSessions });
             }),
           );
         } catch (error) {
@@ -5371,7 +6393,7 @@ window.__ModuleLoader__.load({
               ctx.slots.register(
                 { name: 'sidebar.right.pane.tab', key: PANEL_KEY },
                 function AbacusFlowDock(props) {
-                  return h(PanelRoot, { compact: true, sessionId: props && props.sessionId });
+                  return h(PanelRoot, { slot: 'dock', compact: true, sessionId: props && props.sessionId });
                 },
               ),
             );
