@@ -1,0 +1,7 @@
+# LF everywhere, in the repository and in working copies, regardless of core.autocrlf:
+# several tests read lib/client.js and match on "\n" (e.g. the CSS template boundary).
+* text=auto eol=lf
+*.ps1 text eol=lf
+*.png binary
+*.pdf binary
+*.woff2 binary

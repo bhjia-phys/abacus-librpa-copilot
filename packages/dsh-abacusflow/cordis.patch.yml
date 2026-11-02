@@ -1,0 +1,43 @@
+# dsh-abacusflow bundle patch.
+#
+# Mounts the ABACUS/LibRPA plugin into the host composition of a DSH profile.
+# The host half exposes /abacusflow/api/* HTTP routes (scan / task-bundle / file)
+# and registers the abacus_* and librpa_* agent tools. The browser half
+# (exports "./client") mounts the sidebar entry, the main page and the right-dock
+# tab.
+#
+# Config:
+#   defaultScanRoot  : directory pre-filled in the panel. Empty means "start blank and rely
+#                      on what the browser remembers". Set it to the folder you open most so
+#                      a fresh browser or profile still lands somewhere useful.
+#                      In the panel, 「设为默认」 pins the current path for THIS browser and
+#                      overrides this value; 「用配置默认」 clears that pin.
+#   maxDepth         : how deep below a root the scanner looks for INPUT / librpa.in
+#   maxTasks         : hard cap on tasks returned by one scan
+#   remoteHost       : SSH alias (from ~/.ssh/config) the remote tools drive.
+#                      Empty disables the remote tools' default host.
+#   remoteLocalRoot  : where a pulled remote run is written locally. Point it at a folder
+#                      the panel can also scan, so a pull is immediately viewable.
+#   libraryRoot      : metadata-only index of https://github.com/AroundPeking/LibRPA-database
+#                      (122 record.json, ~3 MB). Do NOT point this at a full clone: the bulk
+#                      data lives on Hugging Face and is fetched per object on demand.
+#
+# Machine-specific values (paths, SSH alias) are deliberately NOT set here. Put them in
+# `local-config.json` beside package.json (git-ignored; copy local-config.example.json).
+# A key set in this file wins over the local file; keys left out here are filled from it.
+#
+# On remote access: do NOT mount the cluster filesystem. On the network this was built on,
+# one SSH command costs ~11.5 s (connection setup alone), so a mount would turn every
+# readdir/stat into a round trip; a single 1473-file directory would stall the UI. The plugin
+# instead uses one connection per action: `abacus_remote_list` returns every task in one
+# `find`, and `abacus_remote_pull` tars only the plot-relevant files (a 37 GB run packs to
+# ~2 MiB).
+#
+# Install into a profile with plugin_manager install_bundle and the package directory,
+# or `dsh plugin --profile <name> add <package>`.
+- insert:
+    - id: abacusflow
+      name: '@local/abacusflow'
+      config:
+        maxDepth: 4
+        maxTasks: 500

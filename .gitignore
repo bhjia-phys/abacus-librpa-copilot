@@ -1,0 +1,28 @@
+# Third-party data: the LibRPA-database checkout (its own git repo, ~270 MB) and the
+# metadata index built from it. Re-create locally; see packages/dsh-abacusflow/README.md.
+/database/
+
+# Browser profiles and caches left by the screenshot scripts (cookies, history).
+.chrome-profile-*/
+
+# Pre-redesign copies kept before this folder was under version control.
+/_archive/
+
+# Stale outputs of the pre-redesign preview scripts.
+/preview.html
+/preview.png
+/band-preview.html
+/band-preview.png
+
+# Machine-specific settings (scan root, database index, SSH alias, sample-data paths).
+# See packages/dsh-abacusflow/local-config.example.json.
+local-config.json
+
+# Agent task briefs (process notes, not project documentation).
+/CLAUDE-CODE-*.md
+
+# Generic
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

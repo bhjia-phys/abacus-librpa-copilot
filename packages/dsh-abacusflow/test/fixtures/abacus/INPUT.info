@@ -1,0 +1,78 @@
+INPUT_PARAMETERS
+#Parameters (1.System)
+suffix                         autotest #the name of main output directory
+ntype                          1 #atom species number
+calculation                    scf #scf; relax; md; cell-relax; nscf; get_s; get_wf; get_pchg; gen_bessel; gen_opt_abfs; test_memory; test_neighbour
+esolver_type                   ksdft #the energy solver: ksdft, sdft, ofdft, tdofdft, tddft, lj, dp, ks-lr, lr
+symmetry                       0 #the control of symmetry
+cal_force                      0 #if calculate the force at the end of the electronic iteration
+kspacing                       0 0 0  #unit in 1/bohr, should be > 0, default is 0 which means read KPT file
+device                         cpu #the computing device for ABACUS
+precision                      double #the computing precision for ABACUS
+cell_factor                    1.2 #used in the construction of the pseudopotential tables
+ecutwfc                        25 #energy cutoff for wave functions
+ecutrho                        100 #energy cutoff for charge density and potential
+stru_file                      STRU #the filename of file containing atom positions
+kpoint_file                    KPT #the name of file containing k points
+pseudo_dir                     /opt/PP_ORB/ #the directory containing pseudo files
+orbital_dir                    /opt/PP_ORB/ #the directory containing orbital files
+basis_type                     lcao #PW; LCAO in pw; LCAO
+
+#Parameters (2.Electronic structure)
+ks_solver                      genelpa #cg; dav; lapack; genelpa; elpa; scalapack_gvx; cusolver
+nbands                         4 #number of bands
+nelec                          0 #input number of electrons
+nspin                          1 #1: single spin; 2: up and down spin; 4: noncollinear spin
+smearing_method                gauss #type of smearing_method: gauss; fd; fixed; mp; mp2; mv
+smearing_sigma                 0.015 #energy range for smearing
+mixing_type                    broyden #plain; pulay; broyden
+mixing_beta                    0.8 #mixing parameter: 0 means no new charge
+mixing_ndim                    8 #mixing dimension in pulay or broyden
+gamma_only                     0 #Only for localized orbitals set and gamma point. If set to 1, a fast algorithm is used
+scf_nmax                       100 #number of electron iterations
+scf_thr                        1e-10 #charge density error
+lspinorb                       0 #consider the spin-orbit interaction
+noncolin                       0 #using non-collinear-spin
+
+#Parameters (3.LCAO)
+nb2d                           0 #matrix 2d division
+lmaxmax                        2 #maximum of l channels used
+bessel_nao_rcut                 #radial cutoff for spherical bessel functions(a.u.)
+
+#Parameters (4.Relaxation)
+relax_method                   cg 1  #cg; bfgs; sd; cg; cg_bfgs;
+relax_new                      1 #whether to use the new relaxation method
+relax_nmax                     1 #number of ion iteration steps
+force_thr                      0.001 #force threshold, unit: Ry/Bohr
+force_thr_ev                   0.0257112 #force threshold, unit: eV/Angstrom
+stress_thr                     0.5 #stress threshold
+fixed_axes                     None #which axes are fixed
+
+#Parameters (5.Molecular dynamics)
+md_type                        nvt #choose ensemble
+md_nstep                       10 #md steps
+md_dt                          1 #time step
+md_thermostat                  nhc #choose thermostat
+md_tfirst                      -1 #temperature first
+md_tlast                       -1 #temperature last
+
+#Parameters (11.Output)
+out_chg                        0 3  #> 0 output charge density for selected electron steps, second parameter controls the precision, default is 3.
+out_dos                        0 #output energy and dos
+out_band                       0 8  #output energy and band structure (with precision 8)
+out_stru                       0 #output the structure files after each ion step
+out_mat_hs2                    1 #output H(R) and S(R) matrix
+out_mul                        0 #mulliken charge or not
+out_level                      ie #ie(for electrons); i(for ions);
+dos_edelta_ev                  0.01 #delta energy for dos
+dos_sigma                      0.07 #gauss b coefficeinet(default=0.07)
+
+#Parameters (14.vdW Correction)
+vdw_method                     none #the method of calculating vdw (none ; d2 ; d3_0 ; d3_bj
+vdw_s6                         default #scale parameter of d2/d3_0/d3_bj
+vdw_d                          20 #damping parameter of d2
+
+#Parameters (16.dft+u)
+dft_plus_u                     0 #DFT+U correction method
+orbital_corr                   -1  #which correlated orbitals need corrected ; d:2 ,f:3, do not need correction:-1
+hubbard_u                      0  #Hubbard Coulomb interaction parameter U(ev)

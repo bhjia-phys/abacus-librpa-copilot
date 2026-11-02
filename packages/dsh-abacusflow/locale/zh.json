@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ABACUS 计算助手",
+    "description": "扫描 ABACUS 与 LibRPA 计算任务，查看 SCF 收敛曲线、晶体结构、输入参数与 QSGW 输出。"
+  }
+}

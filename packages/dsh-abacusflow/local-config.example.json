@@ -1,0 +1,12 @@
+{
+  "defaultScanRoot": "\\\\wsl$\\<distro>\\home\\<user>\\runs",
+  "remoteHost": "<ssh-alias-from-~/.ssh/config>",
+  "remoteLocalRoot": "\\\\wsl$\\<distro>\\home\\<user>\\runs\\from-cluster",
+  "libraryRoot": "<path-to>\\database\\library-index",
+  "dev": {
+    "physicsHome": "\\\\wsl$\\<distro>\\home\\<user>\\physics",
+    "sampleRoot": "\\\\wsl$\\<distro>\\home\\<user>\\runs",
+    "kstudySnapshot": "<path-to>\\snapshot.json",
+    "libraryRoot": "<path-to>\\database\\library-index"
+  }
+}

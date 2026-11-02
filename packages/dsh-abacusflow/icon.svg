@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="ABACUS Flow">
+  <defs>
+    <linearGradient id="afg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f8fd2"/>
+      <stop offset="1" stop-color="#2f6fa8"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#afg)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- unit cell in perspective -->
+    <path d="M6 11.5 L16 6.5 L26 11.5 L26 20.5 L16 25.5 L6 20.5 Z"/>
+    <path d="M6 11.5 L16 16.5 L26 11.5"/>
+    <path d="M16 16.5 L16 25.5"/>
+  </g>
+  <g fill="#4f8fd2">
+    <!-- atoms at the vertices and body centre -->
+    <circle cx="6" cy="11.5" r="2.1"/>
+    <circle cx="16" cy="6.5" r="2.1"/>
+    <circle cx="26" cy="11.5" r="2.1"/>
+    <circle cx="6" cy="20.5" r="2.1"/>
+    <circle cx="26" cy="20.5" r="2.1"/>
+    <circle cx="16" cy="25.5" r="2.1"/>
+  </g>
+  <circle cx="16" cy="16.5" r="2.6" fill="#e8a33d"/>
+</svg>

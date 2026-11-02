@@ -1,0 +1,56 @@
+Initialized LibRPA global environment at [2026-07-24 03:23:27.967]
+Total number of tasks    :     1
+Total number of nodes    :     1
+Maximal number of threads:   1
+MPI tasks information:
+| Proc    0 of Size    1: Bohan-Jia-Phys
+
+LibRPA CMake build info:
+| Build type               : Debug
+| Source code directory    : /home/user/physics/repo/LibRPA/src
+| Source code Git reference: refs/heads/validate/qsgw-symmetry-no-headwing-20260724
+| Source code Git hash     : 1027891ffefa54af355da850736e96a451c456f9
+| C++ compiler             : /opt/intel/oneapi/mpi/2021.18/bin/mpiicpx
+| C++ compiler flags       :   -fiopenmp
+| Fortran compiler         : /opt/intel/oneapi/compiler/2026.1/bin/ifx
+| Fortran compiler flags   : 
+| GreenX commit hash       : c90d131
+| Use LibRI                : ON
+| LibRI include directory  : /home/user/physics/repo/LibRPA/thirdparty/LibRI/include
+| LibComm include directory: /home/user/physics/repo/LibRPA/thirdparty/LibComm/include
+
+===== Begin driver parameters  =====
+task = qsgw
+constants_choice = aims
+input_dir = ../dataset/
+prefix_coul_full = coulomb_full_iq
+prefix_coul_cut = coulomb_cut_iq
+output_level = info
+use_pyatb = false
+qsgw_input_contract = qsgw_input.head-only.contract
+qsgw_mixer = none
+qsgw_min_iter = 1
+qsgw_max_iter = 1
+qsgw_band0_cut_mode = 0
+qsgw_update_hartree = false
+===== End driver parameters    =====
+
+Mean-field dimensions set:
+| number of spins           : 1
+| number of k-points        : 27
+| number of bands           : 18
+| number of NAOs            : 18
+
+Common data parsed, task qsgw will begin
+QSGW iteration 1: max_delta= 9.18152786e+01 eV gap= 7.21148065 eV mixer=none
+QSGW reached qsgw_max_iter=1 without convergence
+QSGW completed iterations: 1
+Finalizing LibRPA global environment at [2026-07-24 03:23:32.830]
+Entry                                             #calls       CPU time (s)       Wall time (s)     
+----------------------------------------------------------------------------------------------------
+Total for driver                                  1            4.8426             4.8626            
+ Driver Read Input Parameters                     1             0.0006             0.0006           
+ Driver Read Task-Common Input Data               1             0.4042             0.4042           
+  read_Vq_row_v1                                  1              0.0098             0.0098         
+  cal_head                                        1              0.0055             0.0055         
+ libRPA finished successfully
