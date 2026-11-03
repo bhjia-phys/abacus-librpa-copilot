@@ -103,15 +103,20 @@ test('the ask box sends the task path and state with the question', () => {
   assert.match(block, /KIND_LABEL/, 'the task kind is included');
 });
 
-test('asking posts a real submission rather than only prefilling', () => {
+// Updated deliberately (§3.2): `askAgent` called only `beginSubmission`, which paints the local
+// echo and sends nothing, and fell back to typing into `textarea:not(.af-textarea)`, which on
+// the main page is not the composer. `postToSession` now follows DSH's composer — echo, then
+// `prompt` with the echo's request id — and a panel without a session says why and copies the
+// text instead. Behaviour is covered in client-pure.test.mjs against a fake ISession.
+test('asking posts a real submission: the echo, then prompt with its request id', () => {
   const block = clientSource.slice(
-    clientSource.indexOf('function askAgent'),
-    clientSource.indexOf('function prefillComposer'),
+    clientSource.indexOf('function postToSession'),
+    clientSource.indexOf('/* @pure-end */'),
   );
-  assert.match(block, /beginSubmission/, 'uses the session submission API');
+  assert.match(block, /beginSubmission/, 'registers the echo');
   assert.match(block, /mode:\s*'queue'/, 'queues the message');
-  // The fallback must still exist for the no-session case.
-  assert.match(block, /prefillComposer/, 'falls back to prefilling');
+  assert.match(block, /session\.prompt\(\[\{ type: 'text', text \}\], 'queue', undefined, handle && handle\.requestId\)/, 'prompt sends it');
+  assert.doesNotMatch(clientSource, /function prefillComposer|querySelector\([^)]*textarea/, 'no guessing at the composer through the DOM');
 });
 
 test('comparison channels are keyed per task, so two tasks cannot collapse', () => {
@@ -170,5 +175,8 @@ test('the dock tells the user the panel is read-only and the agent does the comp
   const block = functionBlock('AgentDock');
   assert.match(block, /面板只读/, 'read-only is stated');
   assert.match(block, /Agent 执行/, 'the agent is named as the actor');
-  assert.match(block, /askAgent\(session/, 'it posts through the session submission path');
+  // Updated deliberately (§3.2): the dock posts through `postToSession` on the resolved link,
+  // and says why when there is no session (`link.reason`) instead of failing silently.
+  assert.match(block, /postToSession\(link\.session/, 'it posts through the session submission path');
+  assert.match(block, /link\.reason/, 'it names the reason when it cannot post');
 });

@@ -199,6 +199,10 @@ packages/dsh-abacusflow/
 | `GET /abacusflow/api/kcompare?ids=a,b&kind=QSGW&spin=1` | k 网格系列：由占据数确定的带边与能隙、k 路径是否相同（只返回标量） |
 | `GET /abacusflow/api/kstudy?path=` | k 收敛研究：`<材料>/k444…` 目录树或 `snapshot.json` |
 | `GET /abacusflow/api/library/search?q=` / `library/match?id=` | LibRPA 数据库检索 / 按 STRU 组成匹配 |
+| `GET /abacusflow/api/library/assets?id=` | 一条记录的资产：图（`kind` 取自 URL 扩展名，`quantity` 取自说明与文件名）、审计 JSON（`audits`，与图分开）、能带表 |
+| `GET /abacusflow/api/library/asset?url=` | 代理取回一个资产（只允许 https + 已知数据集镜像；按扩展名给类型，`nosniff`，SVG/JSON 加沙箱 CSP） |
+| `GET /abacusflow/api/library/band?id=&url=` | 把记录列出的一个能带表按本地 LibRPA 能带文件的同一套方式解析（k 路径长度、由占据数确定的带边） |
+| `GET /abacusflow/api/diagnose?id=` | 阶段诊断：决定性日志行（文件 + 行号）、输入要求 vs 输出、缺失文件、一句结论 |
 | `GET /abacusflow/api/research-context?id=` | 从任务目录向上找最近的 `research.md`（只读，最多 9 次 stat） |
 | `GET /abacusflow/api/file-size?id=` | 文件大小（只在文件页请求，扫描路径不 stat） |
 | `GET /abacusflow/api/file?id=&name=` | 文本预览 |
@@ -214,6 +218,7 @@ VASPFlow 不同（VASPFlow 把 `vasp_*` 限制在它自带的 `vasp` 预设里�
 |---|---|
 | `abacus_scan` | 扫描项目，识别 ABACUS / LibRPA / 耦合任务并给出状态 |
 | `abacus_inspect` | 1–20 个任务的状态与证据（计算类型、基组、结构摘要、k 点、日志收敛、错误签名、LibRPA 版本与结束标记） |
+| `abacus_diagnose` | 一个阶段为什么处于当前状态：决定性日志行（文件与行号）、输入要求 vs 输出、缺失文件、一句结论。与面板「诊断」页是同一个函数 |
 | `abacus_convergence` | 1–12 个任务的 SCF 序列（能量/Fermi/能隙/Δρ），面板画曲线 |
 | `abacus_structure` | 1–12 个 `STRU` 的晶胞、原子、成键、分子式与 3D 场景 |
 | `abacus_inputs` | 1–20 个 `INPUT` 的分组参数与未收录关键字 |
@@ -415,6 +420,26 @@ Line
 
 面板不会替你选一条。匹配不到就明说「没有匹配」，并按目录名给弱候选。
 
+### 与已发表记录对照（运行结果「与已发表记录对照」）
+
+有匹配时，结果页多一节（默认收起）：
+
+- **能隙**：本地 KS 能隙（ABACUS 日志）、本地 GW 系能隙（`qsgw_iterations.dat`）与记录的
+  `dft_gap_ev` / `exx_gap_ev` / `gw_gap_ev` 并排，各自写明来源；差值后面列出这一对数里哪些字段
+  不同、哪些无法核对。本地没有的量不编造。
+- **能否直接比较**：方法、程序、版本、数值原子轨道、赝势、辅助基、SCF k 网格、原子数、自旋、
+  SOC、能隙定义逐项列出，各按来源原样写，判断为「相同 / 不同 / 无法核对」。记录里只有说明
+  文字的（自旋、SOC）标注「据记录说明文字」；LibRPA 的 `GITDIR-NO*` 不当作提交号。
+- **能带**：记录的能带表与本地对应的 LibRPA 通道（GW ↔ QSGW）。k 路径逐点相同才画在同一坐标
+  上，否则分两张图并写明原因（例如「k 点数不同（364 vs 126）」）；纵轴是各自的 E − E_VBM（带边
+  由占据数确定），缺占据数时保持绝对能量并说明零点不同。不插值、不重采样、不平移对齐。
+
+### 记录里的图
+
+「数据库」页展开一条记录：图按物理量分页（KS / EXX / GW / 对比 / 其他），类型看 URL 扩展名而
+不是说明文字（库里有 214 张 SVG、46 张 PNG、46 张 PDF）；PNG 与同名 PDF 合成一张卡片，PDF 是
+链接；审计/来源 JSON 单独列出，展开后按层级看结构，也可以看原文。没有图的记录直接说没有。
+
 ### 安装数据库
 
 ```powershell
@@ -426,9 +451,39 @@ git sparse-checkout set data/calculations README.md archive-completeness.json
 
 约 190 MB。插件配置 `libraryRoot` 指向这个目录。
 
+## 阶段诊断（阶段页「诊断」）
+
+每个阶段多一个「诊断」页；状态不是「已收敛/已完成」时，状态旁有「为什么？」。内容来自
+`/diagnose`（Agent 工具 `abacus_diagnose` 用同一个函数）：
+
+- **一句结论**，只由下面的证据推出，例如「运行被终止：作业被调度器取消（CANCELLED）（librpa.err
+  第 1 行）」。
+- **关键日志行**：致命签名（含 ABACUS 的 `!NOTICE!` 中止及其消息）、收敛结论、结束标记、LibRPA
+  最后一次 QSGW 迭代、`librpa.exitcode`；没有结束标记时引用最后一行。调度器输出（`slurm-*.out`、
+  `librpa.err`）里的时限、OOM、抢占、取消也会被引用，相同的横幅只引一次。
+- **输入要求 vs 输出**：`scf_nmax`/`scf_thr` 与最后一步、`nbands` 与能带文件的带数、`nspin = 2`
+  与两个自旋的能带文件、各 `out_*` 与对应文件、`rpa 1` 与导出文件、`init_chg file` 与电荷密度、
+  `qsgw_max_iter`/收敛判据与迭代表。
+- **缺少的文件**（必需 / 通常会有）与**注**（无法核对的：集群路径的 `input_dir`、本地不存在的
+  `pseudo_dir` 等）。
+- 「交给 Agent…」把整份诊断放进对话栏里的草稿，看过、改过再发。
+
+本地文件常常只是从集群拉回的一部分：INPUT 要求而本地没有的输出标为「本地没有：没有产出，或
+没有拉回本地」，不会说成「没有产出」。
+
+## 问 Agent（对话栏）
+
+主页面（`main` 槽）拿不到 `sessionId`，右侧栏拿得到。两处都通过 DSH 的 `sessions` 服务找会话：
+有槽给的 id 就用，否则用工作区保持为 `mainView` 的那个会话（DSH 自己的标题栏用同一规则）。
+发送与 DSH 输入框完全一致：`beginSubmission`（画出待发气泡）之后 `prompt`（真正发出）。状态行
+跟着 DSH 的回报走：正在发往… → 已接收（Agent 正忙时排在当前回合之后）→ 已出现在对话里，或
+「没有送达：<原因>」，包括接收之后又被撤下的情况。找不到会话时不发送，原因单独一行显示，按钮
+变成「复制」。每次解析在开发者工具里留一行 `[abacusflow] ask box …`，写明试了哪个访问路径、
+返回了什么。
+
 ## 已知边界
 
-- 只读：不写输入、不提交作业。
+- 只读：不写输入、不提交作业。「交给 Agent」只组织消息；计算由对话里的 Agent 执行。
 - `wsl.exe` 在某些 Windows + WSL 组合下不可用（`WslService` 拒绝访问）；插件本身
   不依赖 WSL，WSL 内的路径通过 `\\wsl$\<distro>\...` 这类 UNC 路径同样可读。
 - 大日志按上限读取（默认 24 MB/文件）；超出部分截断，并在 `logTruncated` 标注。

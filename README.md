@@ -20,9 +20,14 @@ their results, plus `abacus_*` / `librpa_*` agent tools that read exactly the sa
 - **Provenance everywhere.** Every gap names its producer and source file; none is derived from
   band indices.
 - **Comparisons.** In-run ABACUS vs LibRPA, k-mesh convergence studies across runs, and the
-  published [LibRPA-database](https://github.com/AroundPeking/LibRPA-database) records.
-- **Agent handoff.** The panel is read-only; it composes context-rich messages for the agent,
-  which does the computing.
+  published [LibRPA-database](https://github.com/AroundPeking/LibRPA-database) records — gaps
+  side by side with their sources, every field that makes the two (in)comparable, and band
+  curves on one axis only when the k paths are provably identical.
+- **Diagnosis.** Every stage has a 诊断 tab: the decisive log lines quoted with file and line
+  (including a Slurm cancel in `librpa.err`), what the input asked for against what the output
+  holds, absent files, and a one-line verdict — also available to the agent as `abacus_diagnose`.
+- **Agent handoff.** The panel is read-only; it composes context-rich messages and posts them
+  into the current DSH conversation, the way DSH's own composer does. The agent does the computing.
 
 Design of record: [UI.md](UI.md). Plugin details (in Chinese): [packages/dsh-abacusflow/README.md](packages/dsh-abacusflow/README.md).
 
@@ -64,6 +69,8 @@ cd packages/dsh-abacusflow
 node scripts/verify.mjs           # manifest, imports, client parse, patch, locale, icon
 node --test test/*.test.mjs       # parsers, panel logic, routes (real-data tests skip without dev paths)
 node scripts/screenshots.mjs      # real panel in headless Chrome → ../../screenshots
+node scripts/check-ask-box.mjs    # ask box, main page and dock, against a stand-in DSH session service
+node scripts/check-library-figures.mjs   # database figures decode per quantity tab; audits open
 ```
 
 The preview and screenshot scripts render the real `lib/client.js` against the real host routes.

@@ -42,8 +42,46 @@ async function plan(base) {
   const NIO = 'nio-matched-dzp-k666-20261016-r1';
   const SI = 'si-qsgw-k666-headwing-kconv-20260517-203305';
   const BI = 'bi2se3-soc-abacus-reexport-20261025-r1';
+  const BI5 = 'bi2se3-soc-qsgw-option5-20261016-r1';
   const ui = (patch, run) => ({ 'abacusflow:ui': { place: 'runs', view: 'results', ...(run ? { runByRoot: { [rootKey]: run } } : {}), ...patch } });
   const openHandoff = "document.querySelector('.af-agent [aria-expanded]').click()";
+  const diagnose = (rel) => ({ view: 'stage', stageId: id(rel), stageTab: 'diagnose' });
+  // Wait for the diagnosis, then hand it to the agent: the draft sheet opens in the dock.
+  const draftDiagnosis = `(async () => {
+    for (let i = 0; i < 100 && !document.querySelector('.af-verdict .af-btn'); i++) await new Promise((r) => setTimeout(r, 100));
+    document.querySelector('.af-verdict .af-btn').click();
+  })()`;
+  // Expand a database record and wait until its figures have decoded (an <img> is not a fetch).
+  const openRecord = (recordId) => `(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let head = null;
+    for (let i = 0; i < 100 && !head; i++) { head = [...document.querySelectorAll('.af-lib-record-head')].find((b) => b.textContent.includes(${JSON.stringify(recordId)})); if (!head) await sleep(100); }
+    head.click();
+    for (let i = 0; i < 300; i++) {
+      const imgs = [...document.querySelectorAll('.af-lib-img')];
+      if (document.querySelector('.af-lib-assets') && imgs.every((img) => img.complete)) break;
+      await sleep(100);
+    }
+    head.scrollIntoView({ block: 'start' });
+  })()`;
+  // Open the published-vs-local comparison (its section remembers being open) and bring it into view.
+  const published = (patch, run) => ({ ...ui(patch, run), 'abacusflow:section:results-published': '1' });
+  const showPublished = `(async () => {
+    for (let i = 0; i < 150; i++) {
+      const s = [...document.querySelectorAll('.af-section')].find((x) => x.textContent.includes('与已发表记录对照'));
+      if (s && s.querySelector('.af-compare')) { s.scrollIntoView({ block: 'start' }); return; }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  })()`;
+  // Type a question into the ask box and send it to the stand-in session.
+  const ask = `(async () => {
+    const input = document.querySelector('.af-agent .af-ask-row input');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '这个结果收敛了吗？');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    document.querySelector('.af-agent .af-ask-row .af-btn').click();
+    await new Promise((r) => setTimeout(r, 1200));
+  })()`;
   const main = { view: 'main', width: 1440, height: 1000 };
   const tall = { view: 'main', width: 1440, height: 2050 };
   const dock = { view: 'dock', width: 1180, height: 1000, dockWidth: 420 };
@@ -65,6 +103,30 @@ async function plan(base) {
     { name: '14-dock-light-picker', ...dock, theme: 'light', seed: ui({}, NIO), actions: ["document.querySelector('.af-picker-btn').click()"] },
     { name: '15-main-dark-first-screen', ...main, theme: 'dark', seed: ui({}, NIO) },
     { name: '16-dock-light-first-screen', ...dock, theme: 'light', seed: ui({}, NIO) },
+    // §4.1 per-stage diagnosis
+    { name: '17-main-light-diagnose-nio-qsgw', ...tall, theme: 'light', seed: ui(diagnose(`${NIO}/qsgw`), NIO) },
+    { name: '18-main-dark-diagnose-bi2se3-cancelled', ...tall, theme: 'dark', seed: ui(diagnose(`${BI5}/run`), BI5) },
+    { name: '19-main-light-diagnose-nio-scf-ok', ...tall, theme: 'light', seed: ui(diagnose(`${NIO}/producer/DZP/01_scf`), NIO) },
+    { name: '20-dock-dark-diagnose-draft', ...dockTall, theme: 'dark', seed: ui(diagnose(`${NIO}/qsgw`), NIO), actions: [draftDiagnosis] },
+    { name: '21-dock-light-diagnose-bi2se3', ...dockTall, theme: 'light', seed: ui(diagnose(`${BI5}/run`), BI5) },
+    // §3.1 database figures by kind and quantity
+    { name: '22-main-light-library-nio-svg', ...tall, theme: 'light', seed: ui({ place: 'library', libraryQuery: 'nio-aims-gw-int' }), actions: [openRecord('nio-aims-gw-int')] },
+    { name: '23-main-dark-library-cuinp2se6-png-pdf', ...tall, theme: 'dark', seed: ui({ place: 'library', libraryQuery: 'cuinp2se6-table-gw' }), actions: [openRecord('cuinp2se6-table-gw')] },
+    { name: '24-dock-light-library-bi2se3', ...dockTall, theme: 'light', seed: ui({ place: 'library', libraryQuery: 'bi2se3-abacus-gw-dzp' }), actions: [openRecord('bi2se3-abacus-gw-dzp')] },
+    { name: '25-dock-dark-library-no-figures', ...dock, theme: 'dark', seed: ui({ place: 'library', libraryQuery: 'c-delta-st-rpa-20260824' }), actions: [openRecord('c-delta-st-rpa-20260824')] },
+    // §3.2 ask box: where it posts, and what it says when it cannot
+    { name: '26-main-light-ask-delivered', ...main, theme: 'light', seed: ui({}, NIO), actions: [ask] },
+    { name: '27-dock-dark-ask-delivered', ...dock, theme: 'dark', seed: ui({}, NIO), actions: [ask] },
+    { name: '28-main-dark-ask-no-session', ...main, theme: 'dark', seed: ui({}, NIO), session: 'none', actions: [ask] },
+    { name: '29-dock-light-ask-refused', ...dock, theme: 'light', seed: ui({}, NIO), session: 'refuse', actions: [ask] },
+    // §4.2 published vs local
+    { name: '30-main-light-published-bi2se3', ...tall, theme: 'light', seed: published({}, BI), actions: [showPublished] },
+    { name: '31-main-dark-published-nio', ...tall, theme: 'dark', seed: published({}, NIO), actions: [showPublished] },
+    { name: '32-dock-light-published-bi2se3', ...dockTall, theme: 'light', seed: published({}, BI), actions: [showPublished] },
+    { name: '33-dock-dark-published-nio', ...dockTall, theme: 'dark', seed: published({}, NIO), actions: [showPublished] },
+    // A hot-reloaded panel against the first release's host (DSH not fully restarted)
+    { name: '34-main-light-old-host-library', ...tall, theme: 'light', seed: ui({ place: 'library', libraryQuery: 'nio-aims-gw-int' }), host: 'old', actions: [openRecord('nio-aims-gw-int')] },
+    { name: '35-dock-dark-old-host-diagnose', ...dockTall, theme: 'dark', seed: ui(diagnose(`${NIO}/qsgw`), NIO), host: 'old' },
   ];
 }
 

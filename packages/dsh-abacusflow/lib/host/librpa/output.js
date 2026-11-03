@@ -697,3 +697,9 @@ export function classifyLibrpaRun(input) {
     evidence,
   };
 }
+
+/**
+ * The error signatures `parseLibrpaLog` matches, for the per-stage diagnosis
+ * (lib/host/diagnose.js), which quotes matching lines with their line numbers.
+ */
+export const LIBRPA_LOG_SIGNATURES = Object.freeze(LIBRPA_SIGNATURES.map((sig) => Object.freeze({ ...sig })));

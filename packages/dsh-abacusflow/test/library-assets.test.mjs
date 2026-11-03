@@ -10,14 +10,23 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   validateAssetUrl,
   listAssets,
   detectLibraryLayout,
+  assetKind,
+  assetQuantity,
+  fetchAsset,
+  publishedBandChannel,
 } from '../lib/host/library-assets.js';
 import { loadLibrary, matchTask } from '../lib/host/library.js';
+import { localData } from '../scripts/lib/local-data.mjs';
 
 // ------------------------------------------------------------ URL safety -----
 
@@ -87,13 +96,101 @@ test('an asset without an allowed URL is still listed, with url null', () => {
 test('a record with no files yields empty groups rather than throwing', () => {
   const groups = listAssets({ id: 'empty' });
   assert.deepEqual(groups.figures, []);
+  assert.deepEqual(groups.audits, []);
   assert.deepEqual(groups.bandData, []);
+});
+
+// ------------------------------------------- kind and quantity (§3.1) ------
+//
+// The database's `label` is a caption, not a file name: 214 of its figures are SVGs captioned
+// like "GW occupation-separated frontier", and the panel used to keep only labels ending in
+// .png. The kind now comes from the URL; the quantity from caption and file-name words.
+
+const HF = 'https://huggingface.co/datasets/AroundPeking/LibRPA-database/resolve/0123abc/data/calculations';
+
+test('the kind comes from the URL path, never from the caption', () => {
+  assert.equal(assetKind(`${HF}/3d/NiO/nio-aims-gw-int/figures/gw_frontier.svg`), 'svg');
+  assert.equal(assetKind(`${HF}/2d/X/x/figures/x_ks.png?download=true`), 'png');
+  assert.equal(assetKind(`${HF}/2d/X/x/figures/x_ks.PDF`), 'pdf');
+  assert.equal(assetKind(`${HF}/3d/NiO/nio-aims-gw-int/figures/band_frontier_metadata.json`), 'json');
+  assert.equal(assetKind(`${HF}/3d/NiO/nio-aims-gw-int/results/GW_band2001.out`), 'text');
+  assert.equal(assetKind(null, 'data/calculations/3d/NiO/x/results/GW_band_spin_1.dat'), 'dat', 'the record path is the fallback');
+  assert.equal(assetKind(`${HF}/3d/NiO/x/inputs/KPT_band`), 'other');
+});
+
+test('the quantity is read from caption and file-name words, not from the record path', () => {
+  assert.equal(assetQuantity('cuinp2se6_ks.png', 'data/calculations/2d/CuInP2Se6/cuinp2se6-table-gw/figures/cuinp2se6_ks.png').quantity, 'KS',
+    'an underscore separates words, and the record directory ("-gw") is ignored');
+  assert.equal(assetQuantity('GW occupation-separated frontier', 'x/figures/gw_frontier.svg').quantity, 'GW');
+  assert.equal(assetQuantity('EXX occupation-separated frontier', 'x/figures/exx_frontier.svg').quantity, 'EXX');
+  const both = assetQuantity('KS / EXX / GW band comparison', 'x/figures/band_comparison.svg');
+  assert.equal(both.quantity, 'compare');
+  assert.deepEqual(both.quantities, ['KS', 'EXX', 'GW']);
+  assert.equal(assetQuantity('hbn_tzdp10_cutoff_zoom.png', 'x/figures/figures__hbn_tzdp10_cutoff_zoom.png').quantity, 'other');
+  assert.equal(assetQuantity('G0W0 frontier', null).quantity, 'GW');
+  assert.equal(assetQuantity('QSGW_band_spin_1.dat', null).quantity, 'QSGW');
+});
+
+const NIO_LIKE = {
+  id: 'nio-like',
+  material: 'NiO',
+  files: {
+    results: [
+      { label: 'GW_band_spin_1.dat', path: 'data/calculations/3d/NiO/nio-like/results/GW_band_spin_1.dat', external_url: `${HF}/3d/NiO/nio-like/results/GW_band_spin_1.dat` },
+      { label: 'EXX_band_spin_1.dat', path: 'data/calculations/3d/NiO/nio-like/results/EXX_band_spin_1.dat', external_url: `${HF}/3d/NiO/nio-like/results/EXX_band_spin_1.dat` },
+      { label: 'GW_band2001.out', path: 'data/calculations/3d/NiO/nio-like/results/GW_band2001.out', external_url: `${HF}/3d/NiO/nio-like/results/GW_band2001.out` },
+      { label: 'cuinp2se6_GW.dat', path: 'data/calculations/2d/C/c/results/GW_bands.dat', external_url: `${HF}/2d/C/c/results/GW_bands.dat` },
+    ],
+    figures: [
+      { label: 'GW occupation-separated frontier', path: 'data/calculations/3d/NiO/nio-like/figures/gw_frontier.svg', external_url: `${HF}/3d/NiO/nio-like/figures/gw_frontier.svg`, display_priority: 'primary' },
+      { label: 'EXX occupation-separated frontier', path: 'data/calculations/3d/NiO/nio-like/figures/exx_frontier.svg', external_url: `${HF}/3d/NiO/nio-like/figures/exx_frontier.svg` },
+      { label: 'Frontier display mappings, raw audit and provenance', path: 'data/calculations/3d/NiO/nio-like/figures/band_frontier_metadata.json', external_url: `${HF}/3d/NiO/nio-like/figures/band_frontier_metadata.json` },
+    ],
+  },
+};
+
+test('SVG figures are listed as figures; their audit JSON is listed apart', () => {
+  const groups = listAssets(NIO_LIKE);
+  assert.deepEqual(groups.figures.map((f) => [f.kind, f.quantity]), [['svg', 'EXX'], ['svg', 'GW']], 'physics order: EXX before GW');
+  assert.equal(groups.figures[1].primary, true);
+  assert.equal(groups.figures[1].stem, 'gw_frontier');
+  assert.deepEqual(groups.audits.map((f) => f.label), ['Frontier display mappings, raw audit and provenance']);
+  assert.equal(groups.audits[0].kind, 'json');
+});
+
+test('band tables are found by file name, whatever their caption', () => {
+  const groups = listAssets(NIO_LIKE);
+  assert.deepEqual(groups.bandData.map((f) => [f.label, f.quantity, f.spin]), [
+    ['EXX_band_spin_1.dat', 'EXX', 1],
+    ['cuinp2se6_GW.dat', 'GW', null],
+    ['GW_band_spin_1.dat', 'GW', 1],
+  ]);
+  assert.ok(groups.results.some((f) => f.label === 'GW_band2001.out'), 'an FHI-aims band segment is a result, not a band table');
+});
+
+test('a cached SVG is served as image/svg+xml, as on the first fetch', async () => {
+  // A cache hit has no upstream header. It used to fall back to application/octet-stream,
+  // which an <img> refuses for SVG: the figure showed once and broke on the second look.
+  const cacheDir = mkdtempSync(join(tmpdir(), 'abacusflow-assets-'));
+  try {
+    const url = `${HF}/3d/NiO/nio-like/figures/gw_frontier.svg`;
+    writeFileSync(join(cacheDir, createHash('sha256').update(url).digest('hex').slice(0, 32)), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    const hit = await fetchAsset({ cacheDir, url });
+    assert.equal(hit.ok, true);
+    assert.equal(hit.cached, true);
+    assert.equal(hit.contentType, 'image/svg+xml');
+    const json = `${HF}/3d/NiO/nio-like/figures/band_frontier_metadata.json`;
+    writeFileSync(join(cacheDir, createHash('sha256').update(json).digest('hex').slice(0, 32)), '{}');
+    assert.match((await fetchAsset({ cacheDir, url: json })).contentType, /^application\/json/);
+  } finally {
+    rmSync(cacheDir, { recursive: true, force: true });
+  }
 });
 
 // ------------------------------------------------------- index vs repo ------
 
-const INDEX_ROOT = 'F:\\AI_Workspace\\dsh-abacusflow\\database\\library-index';
-const REPO_ROOT = 'F:\\AI_Workspace\\dsh-abacusflow\\database\\LibRPA-database';
+const INDEX_ROOT = localData().libraryRoot || fileURLToPath(new URL('../../../database/library-index', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../../../database/LibRPA-database', import.meta.url));
 const hasIndex = existsSync(INDEX_ROOT);
 
 test('layout detection distinguishes an index from a repository checkout', () => {
@@ -128,4 +225,68 @@ test('index records carry the external URLs the panel fetches from', { skip: !ha
   const sample = listAssets(withFigures[0]);
   assert.ok(sample.figures[0].url, 'a figure URL survived validation');
   assert.match(sample.figures[0].url, /^https:\/\/(huggingface\.co|hf-mirror\.com)\//);
+});
+
+// The four records §3.1 is verified against: SVG + audit JSON (NiO, Bi2Se3), PNG + PDF
+// pairs (CuInP2Se6), and a record with no figures at all.
+test('real records: every figure kind is offered, audits apart', { skip: !hasIndex }, () => {
+  const library = loadLibrary(INDEX_ROOT);
+  const groupsOf = (id) => {
+    const record = library.records.find((r) => r.id === id);
+    assert.ok(record, `record ${id} present`);
+    return listAssets(record);
+  };
+  const nio = groupsOf('nio-aims-gw-int');
+  assert.deepEqual(nio.figures.map((f) => `${f.kind}:${f.quantity}`), ['svg:EXX', 'svg:GW']);
+  assert.equal(nio.audits.length, 1);
+  assert.deepEqual(nio.bandData.map((f) => f.quantity), ['EXX', 'GW']);
+
+  const bi = groupsOf('bi2se3-abacus-gw-dzp');
+  assert.deepEqual(bi.figures.map((f) => `${f.kind}:${f.quantity}`), ['svg:KS', 'svg:EXX', 'svg:GW']);
+  assert.equal(bi.audits.length, 1);
+  assert.equal(bi.bandData.length, 3);
+
+  const cu = groupsOf('cuinp2se6-table-gw');
+  assert.deepEqual(cu.figures.map((f) => `${f.kind}:${f.quantity}`), ['png:KS', 'pdf:KS', 'png:EXX', 'pdf:EXX', 'png:GW', 'pdf:GW']);
+  assert.equal(cu.audits.length, 0);
+  assert.deepEqual(cu.bandData.map((f) => f.quantity), ['KS', 'EXX', 'GW']);
+
+  const none = groupsOf('c-delta-st-rpa-20260824');
+  assert.equal(none.figures.length + none.audits.length, 0);
+
+  // Across the whole index nothing is lost: every figure entry lands in figures or audits.
+  let entries = 0;
+  let listed = 0;
+  for (const record of library.records) {
+    entries += (record.files?.figures ?? []).length;
+    const g = listAssets(record);
+    listed += g.figures.filter((f) => f.role === 'figures').length + g.audits.length;
+  }
+  assert.equal(listed, entries, 'every figure entry is offered');
+});
+
+// ------------------------------------------------ published band tables (§4.2) ---
+
+test('a published band table is read exactly like a local LibRPA band file', () => {
+  // LibRPA's layout: ik kx ky kz, then (occupation energy) per state. Two occupied, one empty.
+  const text = [
+    '1 0.000 0.000 0.000  1.0 -1.20  1.0 -0.50  0.0 1.30',
+    '2 0.100 0.000 0.000  1.0 -1.10  1.0 -0.40  0.0 1.10',
+    '3 0.200 0.000 0.000  1.0 -1.00  1.0 -0.45  0.0 0.90',
+  ].join('\n');
+  const ch = publishedBandChannel(text, { label: 'GW_band_spin_1.dat', quantity: 'GW', spin: 1, path: 'x/results/GW_band_spin_1.dat' });
+  assert.equal(ch.ok, true, ch.error);
+  assert.equal(ch.nKpoint, 3);
+  assert.equal(ch.nBand, 3);
+  assert.deepEqual(ch.kpath, [0, 0.1, 0.2], 'cumulative path length over the file coordinates');
+  assert.equal(ch.vbmEv, -0.4, 'VBM from occupations, per k');
+  assert.equal(ch.cbmEv, 0.9);
+  assert.ok(Math.abs(ch.gapEv - 1.3) < 1e-9);
+  assert.equal(ch.file, 'GW_band_spin_1.dat');
+});
+
+test('a file that is not a LibRPA band table is refused with a reason, not plotted', () => {
+  const ch = publishedBandChannel('# k  E1 E2\n0.0 -1.0 1.0\n', { label: 'x.dat', quantity: 'GW', spin: 1, path: 'x.dat' });
+  assert.equal(ch.ok, false);
+  assert.match(ch.error, /LibRPA 能带行/);
 });

@@ -34,6 +34,7 @@ import { tmpdir } from 'node:os';
 import { scanProject, scanSingleDir } from './host/scanner.js';
 import { TaskStore } from './host/task-store.js';
 import { buildTaskBundle, probeTaskStatus } from './host/task-bundle.js';
+import { diagnoseStage } from './host/diagnose.js';
 import { readBands, compactBands } from './host/bands.js';
 import { listRemoteTasks, pullRemoteRun } from './host/remote.js';
 import { buildKStudy } from './host/kstudy.js';
@@ -41,7 +42,7 @@ import { compareRuns } from './host/kconvergence.js';
 import { findResearchContext } from './host/research-context.js';
 import { withLocalConfig } from './host/local-config.js';
 import { loadLibrary, matchTask, summarizeRecord, speciesCountsFromStru } from './host/library.js';
-import { fetchAsset, listAssets } from './host/library-assets.js';
+import { fetchAsset, listAssets, publishedBandChannel } from './host/library-assets.js';
 import { readTextCapped, normalizeRel, statFilesParallel, safeStat } from './host/shared/paths.js';
 import { struToScene } from './host/abacus/stru-scene.js';
 import { parseStru, applyLatname } from './host/abacus/stru.js';
@@ -74,6 +75,16 @@ function normalizeConfig(raw) {
 }
 
 const API_PREFIX = '/abacusflow/api';
+
+/**
+ * What this host serves beyond the first release, announced by `/ping`. The panel compares it
+ * with what it needs (`HOST_FEATURES_NEEDED` in lib/client.js) and says so when the host is
+ * behind, instead of failing on a missing field or route.
+ *   asset-kind     `/library/assets` items carry kind/quantity/stem, and audits come apart
+ *   diagnose       `/diagnose`
+ *   library-band   `/library/band`
+ */
+const HOST_FEATURES = Object.freeze(['asset-kind', 'diagnose', 'library-band']);
 
 /** Session workspace cwd for a tool call, matching dsh-tool-fs.sessionCwd. */
 function workspaceOf(exec) {
@@ -253,6 +264,27 @@ function renderStructure(value) {
   );
 }
 
+/** One stage's diagnosis as text: the verdict first, then the evidence it rests on. */
+function renderDiagnosis(value) {
+  if (value.error) return textResult(`诊断失败：${value.error}`);
+  const d = value.diagnosis;
+  const lines = [`【${d.stage.relPath || '.'}】${kindLabel(d.stage.kind)} · 结论：${d.verdict.text}`];
+  if (d.lines.length) {
+    lines.push('关键日志行：');
+    for (const l of d.lines) lines.push(`  ${l.file}${l.line ? ` 第 ${l.line} 行` : ''}（${l.why}）：${l.text}`);
+  }
+  if (d.checks.length) {
+    lines.push('输入要求 vs 输出：');
+    for (const c of d.checks) lines.push(`  ${c.ok === true ? '✓' : c.ok === false ? '✗' : '?'} ${c.asked} → ${c.found}${c.note ? `（${c.note}）` : ''}`);
+  }
+  if (d.missing.length) {
+    lines.push('缺少的文件：');
+    for (const m of d.missing) lines.push(`  ${m.name}：${m.why}${m.need === 'required' ? '（必需）' : ''}`);
+  }
+  for (const n of d.notes) lines.push(`注：${n}`);
+  return textResult(lines.join('\n'));
+}
+
 function renderInspect(value) {
   if (value.error) return textResult(`查看任务失败：${value.error}`);
   const lines = [];
@@ -396,7 +428,9 @@ export function apply(ctx, rawConfig) {
   };
 
   route(`${API_PREFIX}/ping`, async (req, res, send) => {
-    send(200, { ok: true, version: '0.1.0', defaultScanRoot: cfg.defaultScanRoot });
+    // `features` lets the panel tell when the host is older than itself: DSH hot-reloads the
+    // client bundle, but this half keeps running until DSH is fully restarted.
+    send(200, { ok: true, version: '0.1.0', features: HOST_FEATURES, defaultScanRoot: cfg.defaultScanRoot });
   });
 
   route(`${API_PREFIX}/scan`, async (req, res, send) => {
@@ -423,6 +457,18 @@ export function apply(ctx, rawConfig) {
     const task = store.taskById(id);
     if (!task) return send(404, { error: '任务不在已扫描结果中，请先扫描' });
     send(200, bundleFor(toolCtx, task));
+  });
+
+  // Why a stage is in its state (host/diagnose.js): the decisive log lines with line numbers,
+  // what the input asked for against what the output holds, absent files, a one-line verdict.
+  // On demand for one stage; the same function backs the `abacus_diagnose` tool.
+  route(`${API_PREFIX}/diagnose`, async (req, res, send) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1');
+    const id = url.searchParams.get('id');
+    if (!id) return send(400, { error: '缺少 id' });
+    const task = store.taskById(id);
+    if (!task) return send(404, { error: '任务不在已扫描结果中，请先扫描' });
+    send(200, diagnoseStage(task, bundleFor(toolCtx, task)));
   });
 
   route(`${API_PREFIX}/remote/list`, async (req, res, send) => {
@@ -525,7 +571,7 @@ export function apply(ctx, rawConfig) {
     const id = url.searchParams.get('id');
     if (!id) return send(400, { error: '缺少 id' });
     const library = getLibrary();
-    if (!library.ok) return send(200, { ok: false, error: library.error, figures: [], bandData: [] });
+    if (!library.ok) return send(200, { ok: false, error: library.error, figures: [], audits: [], bandData: [] });
     const record = library.records.find((r) => r.id === id);
     if (!record) return send(404, { error: `数据库里没有记录 ${id}` });
     const groups = listAssets(record);
@@ -536,9 +582,11 @@ export function apply(ctx, rawConfig) {
       material: record.material,
       formula: record.formula,
       figures: groups.figures,
+      audits: groups.audits,
       bandData: groups.bandData,
       counts: {
         figures: groups.figures.length,
+        audits: groups.audits.length,
         bandData: groups.bandData.length,
         inputs: groups.inputs.length,
         results: groups.results.length,
@@ -554,13 +602,44 @@ export function apply(ctx, rawConfig) {
     const fetched = await fetchAsset({ cacheDir: libraryCacheDir(), url: target });
     if (!fetched.ok) return send(502, { error: fetched.error, url: target });
     // Binary response: `send` is JSON-only, so write the bytes directly.
+    const contentType = fetched.contentType || 'application/octet-stream';
     res.writeHead(200, {
-      'content-type': fetched.contentType || 'application/octet-stream',
+      'content-type': contentType,
       'content-length': String(fetched.bytes.length),
       'cache-control': 'public, max-age=86400',
       'x-abacusflow-cached': fetched.cached ? '1' : '0',
+      // The type above is the one the panel relies on (an SVG <img> needs image/svg+xml);
+      // the browser must not second-guess it.
+      'x-content-type-options': 'nosniff',
+      // These bytes come from a dataset, and this route shares DSH's origin. An <img> never
+      // runs an SVG's scripts, but opening the URL directly would; the sandbox keeps a
+      // document served from here script-free and in its own origin. (Not applied to PDFs:
+      // Chrome's viewer refuses to render inside a sandboxed document.)
+      ...(/^(image\/svg\+xml|application\/json|text\/)/.test(contentType)
+        ? { 'content-security-policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox" }
+        : {}),
     });
     res.end(fetched.bytes);
+  });
+
+  // One published band table as a channel (host/library-assets.js `publishedBandChannel`):
+  // parsed and measured exactly like a local LibRPA band file, so the panel's ordinary
+  // alignment check decides whether it may share an axis with a local curve. Only a URL the
+  // record itself lists as band data is fetched.
+  route(`${API_PREFIX}/library/band`, async (req, res, send) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1');
+    const id = url.searchParams.get('id');
+    const target = url.searchParams.get('url');
+    if (!id || !target) return send(400, { error: '缺少 id 或 url' });
+    const library = getLibrary();
+    if (!library.ok) return send(200, { ok: false, error: library.error });
+    const record = library.records.find((r) => r.id === id);
+    if (!record) return send(404, { error: `数据库里没有记录 ${id}` });
+    const item = listAssets(record).bandData.find((b) => b.url && b.url === target);
+    if (!item) return send(404, { error: '这条记录没有列出这个能带文件' });
+    const fetched = await fetchAsset({ cacheDir: libraryCacheDir(), url: item.url });
+    if (!fetched.ok) return send(502, { error: fetched.error });
+    send(200, { recordId: record.id, label: item.label, ...publishedBandChannel(fetched.bytes.toString('utf8'), item) });
   });
 
   route(`${API_PREFIX}/kstudy`, async (req, res, send) => {
@@ -816,6 +895,41 @@ export function apply(ctx, rawConfig) {
         };
       });
       return { rootPath, results, error: '' };
+    },
+  });
+
+  registerTool({
+    name: 'abacus_diagnose',
+    description:
+      '诊断一个 ABACUS 或 LibRPA 阶段为什么处于当前状态：引用决定性的日志行（文件与行号）、对照输入要求与实际输出、列出缺少的文件，并给出一句结论。只读；本地文件可能是从集群拉回的子集，缺失的输出会如实标注为“没有产出或没有拉回”。',
+    parameters: {
+      type: 'object',
+      properties: {
+        rootPath: { type: 'string', description: '项目根目录绝对路径；省略则用当前会话工作目录。' },
+        relPath: { type: 'string', description: '相对于 rootPath 的任务目录。' },
+      },
+      required: ['relPath'],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          rootPath: { type: 'string' },
+          diagnosis: { type: 'object', additionalProperties: true },
+          error: { type: 'string', required: true },
+        },
+        additionalProperties: true,
+      },
+      render: (_args, value) => renderDiagnosis(value),
+    },
+    async execute(args, exec) {
+      const rootPath = resolveRoot(exec, args.rootPath);
+      const scan = await ensureScan(toolCtx, rootPath);
+      if (scan.error) return { rootPath, diagnosis: null, error: scan.error };
+      const task = findTask(scan, String(args.relPath ?? ''));
+      if (!task) return { rootPath, diagnosis: null, error: `${args.relPath} 不是已识别的 ABACUS 或 LibRPA 任务` };
+      return { rootPath, diagnosis: diagnoseStage(task, bundleFor(toolCtx, task)), error: '' };
     },
   });
 

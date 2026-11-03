@@ -196,9 +196,37 @@ const HARNESS = `<!doctype html>
   // Idle detection for screenshots: no fetch in flight for 700 ms.
   (function () {
     var pending = 0, last = Date.now(), realFetch = window.fetch.bind(window);
-    window.fetch = function () {
+    // ?host=old answers like the first release's host, which a hot-reloaded panel can meet in a
+    // DSH that was not fully restarted: no feature list in /ping, asset items without
+    // kind/quantity/stem (audits among the figures), and no /diagnose or /library/band.
+    var oldHost = __afParams.get('host') === 'old';
+    var newRoute = /\\/abacusflow\\/api\\/(diagnose|library\\/band)\\b/;
+    var strip = function (item) {
+      var out = {};
+      for (var k in item) if (['kind', 'quantity', 'quantities', 'stem', 'spin', 'primary'].indexOf(k) < 0) out[k] = item[k];
+      return out;
+    };
+    var asOldHost = function (url, sent) {
+      if (!/\\/abacusflow\\/api\\/(ping|library\\/assets)\\b/.test(url)) return sent;
+      return sent.then(function (r) {
+        return r.json().then(function (body) {
+          if (/\\/ping/.test(url)) delete body.features;
+          else {
+            body.figures = (body.figures || []).concat(body.audits || []).map(strip);
+            delete body.audits;
+            body.bandData = (body.bandData || []).map(strip);
+          }
+          return new Response(JSON.stringify(body), { status: r.status, headers: { 'content-type': 'application/json' } });
+        });
+      });
+    };
+    window.fetch = function (input) {
       pending += 1; last = Date.now();
-      return realFetch.apply(null, arguments).finally(function () { pending -= 1; last = Date.now(); });
+      var url = typeof input === 'string' ? input : input.url;
+      var answer = oldHost && newRoute.test(url)
+        ? Promise.resolve(new Response('Not Found', { status: 404 }))
+        : oldHost ? asOldHost(url, realFetch.apply(null, arguments)) : realFetch.apply(null, arguments);
+      return answer.finally(function () { pending -= 1; last = Date.now(); });
     };
     window.__afIdle = function (quiet) {
       quiet = quiet || 700;
@@ -212,13 +240,59 @@ const HARNESS = `<!doctype html>
 <script src="/vendor/react.js"></script>
 <script>
   var registry = {};
+  // A stand-in for DSH's Client session service, shaped like the real one
+  // (dsh-api-session-controller): \`list\` is an observable snapshot whose rows carry
+  // \`retainedBy\`; \`binding(id)\` lends a retained session; \`beginSubmission\` only paints
+  // the echo and \`prompt\` is what reaches the Host. \`?session=\` picks how it behaves:
+  //   ok (default) · running (queued behind a turn) · refuse (Host refuses the prompt)
+  //   late (accepted, then withdrawn) · none (no conversation open) · noservice
+  var sessionMode = __afParams.get('session') || 'ok';
+  var chatLog = function (text, note) {
+    var chat = document.getElementById('chat');
+    if (!chat) return;
+    var div = document.createElement('div');
+    div.className = 'msg';
+    div.textContent = (note ? '[' + note + '] ' : '') + text;
+    chat.appendChild(div);
+  };
   var fakeSession = {
+    getSnapshot: function () { return { running: sessionMode === 'running' }; },
     beginSubmission: function (sub) {
-      window.__afPosted.push(sub.text);
-      var chat = document.getElementById('chat');
-      if (chat) { var div = document.createElement('div'); div.className = 'msg'; div.textContent = sub.text; chat.appendChild(div); }
-      return { id: window.__afPosted.length };
+      var requestId = 'preview-' + (window.__afPosted.length + 1);
+      window.__afPosted.push({ requestId: requestId, text: sub.text, phase: 'echo' });
+      fakeSession.retire = fakeSession.retire || {};
+      fakeSession.retire[requestId] = sub.onRetire;
+      return { requestId: requestId, abandon: function () {} };
     },
+    prompt: function (content, mode, signal, requestId) {
+      var text = content.map(function (part) { return part.text || ''; }).join('');
+      var retire = (fakeSession.retire || {})[requestId];
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          if (sessionMode === 'refuse') {
+            if (retire) retire({ reason: 'failed' });
+            resolve({ ok: false, error: { code: 'session/busy', message: '会话正在关闭（预览模拟）' } });
+            return;
+          }
+          resolve({ ok: true, value: { accepted: true } });
+          setTimeout(function () {
+            if (sessionMode === 'late') { if (retire) retire({ reason: 'failed' }); return; }
+            window.__afPosted.push({ requestId: requestId, text: text, phase: 'observed', mode: mode });
+            chatLog(text, sessionMode === 'running' ? '排队' : '');
+            if (retire) retire({ reason: 'observed', attachments: [] });
+          }, 300);
+        }, 150);
+      });
+    },
+  };
+  var sessionList = {
+    phase: 'ready',
+    ids: ['preview'],
+    byId: { preview: { id: 'preview', title: 'NiO QSGW 收敛（预览）', retainedBy: sessionMode === 'none' ? { sidebarChat: 1 } : { mainView: 1 } } },
+  };
+  var fakeSessions = {
+    list: { getSnapshot: function () { return sessionList; }, subscribe: function () { return function () {}; } },
+    binding: function (id) { return id === 'preview' && sessionMode !== 'none' ? { sessionId: id, session: fakeSession } : undefined; },
   };
   var fakeCtx = {
     slots: {
@@ -226,7 +300,7 @@ const HARNESS = `<!doctype html>
       register: function (desc, component) { registry[desc.name] = component; return function () {}; },
     },
     get: function (name) {
-      if (name === 'sessions') return { scope: function () { return { get: function () { return fakeSession; } }; } };
+      if (name === 'sessions') return sessionMode === 'noservice' ? undefined : fakeSessions;
       if (name === 'sidebarRightTabs') return { register: function () { return function () {}; } };
       return undefined;
     },
@@ -249,12 +323,15 @@ const HARNESS = `<!doctype html>
       dock.style.width = (__afParams.get('dockWidth') || '400') + 'px';
       stage.appendChild(chat);
       stage.appendChild(dock);
-      createRoot(dock).render(React.createElement(registry['sidebar.right.pane.tab'], { sessionId: 'preview' }));
+      // DSH hands the session-scoped dock tab its sessionId.
+      createRoot(dock).render(React.createElement(registry['sidebar.right.pane.tab'], { sessionId: sessionMode === 'none' ? undefined : 'preview' }));
     } else {
       var main = document.createElement('div');
       main.id = 'main';
       stage.appendChild(main);
-      createRoot(main).render(React.createElement(registry.main, { sessionId: 'preview' }));
+      // The root-scoped main slot gets the standard hooks and no sessionId, as in DSH.
+      var useSessions = function (selector) { return selector(sessionList); };
+      createRoot(main).render(React.createElement(registry.main, { useSessions: useSessions }));
     }
   })();
 </script>
