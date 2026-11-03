@@ -1,6 +1,8 @@
-# dsh-abacusflow — panel UI architecture
+# ABACUS-LibRPA Copilot — panel UI architecture
 
-This document is the design of record for the panel in `packages/dsh-abacusflow/lib/client.js`.
+This document is the design of record for the panel in `packages/dsh-abacusflow/lib/client.js`
+(DSH package `@local/abacusflow`; the visible name is the `PANEL_NAME` constant, and the package
+id, routes and storage keys keep the original name so installs and remembered state carry over).
 It explains *what the panel is organised around*, *how the three kinds of comparison map onto
 concrete UI*, and the design foundation (tokens, type, spacing, components) every pane uses.
 
@@ -332,6 +334,7 @@ Screenshots (`screenshots/`, all from real data, 0 console errors):
 | `26` – `29` ask box | delivered (main light, dock dark); no conversation open — reason + 复制 (main dark); refused by the host (dock light) |
 | `30` – `33` 与已发表记录对照 | Bi2Se3 vs `bi2se3-abacus-gw-dzp` — same 101-point path, so one axis (main light, dock light); NiO vs `nio-aims-gw-int` — 364 vs 126 points, side by side (main dark, dock dark) |
 | `34` / `35` older host | the panel against the first release's host (`?host=old`, §13.3): database still works, with the banner (main light); 诊断 says it needs the new host (dock dark) |
+| `36` / `37` a record, read | KCl (the record that failed in live use) with its gap tile, facts and figure (main light); the same record when both mirrors fail — the reason, 重试 and a browser link (`?assetfail=1`, main dark) |
 
 ## 11. Deliberately left for later
 
@@ -455,6 +458,15 @@ rather than as an image. Keep the description as the caption.
   figures says so. The physically wrong `parsePublishedBandCurve` / `PublishedBandChart` (which
   read LibRPA's `ik kx ky kz` columns as "k + energies") are gone; band tables are listed, and
   plotted through §15.
+- **After live use** (a KCl figure stayed blank, and the record read like a field dump): a
+  failed download — timeout, connection error, 5xx, 429 — is retried once on the other mirror
+  (`huggingface.co` ↔ `hf-mirror.com`, identical paths; 25 s per attempt), and a failure is never
+  cached. The figure card says 正在从数据集取图… while it loads; on failure it shows the host's own
+  reason (e.g. 「huggingface.co 超时（25 秒）；hf-mirror.com 连接失败（ECONNRESET）」) with 重试 and a
+  link to open the file in the browser. An open record leads with the material and its gaps as
+  tiles, then 结果 / 性质 (the `scientific_status` in words, the raw value as a tooltip) / 程序 /
+  物种, and the record's scope clamped to two lines (展开全文 only when it is actually cut). The
+  record file path moved to the row's tooltip; audits and band tables are light disclosure rows.
 - Verified on the four records: NiO 2 SVG (1080×740) + 1 audit; Bi2Se3 3 SVG + 1 audit;
   CuInP2Se6 3 PNG (2946×1906) each with its PDF; `c-delta-st-rpa-20260824` 「这条记录没有上传图」.
   Across all 122 records every figure entry lands in figures or audits (a test asserts it).

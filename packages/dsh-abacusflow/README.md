@@ -1,4 +1,6 @@
-# dsh-abacusflow
+# ABACUS-LibRPA Copilot
+
+（原名 dsh-abacusflow；DSH 里的包名仍是 `@local/abacusflow`，已安装的插件不用重装。）
 
 ABACUS + LibRPA 的科研助手插件，面向 DeepSeek Harness（DSH）0.2。它是
 [VASPFlow](https://github.com/21271122/VASPFlow) 架构在 ABACUS/LibRPA 上的移植：

@@ -133,7 +133,7 @@ export async function openPage(cdp, url, { width, height, actions = [] }) {
 }
 
 /** Query string for the preview harness (scripts/preview-server.mjs). */
-export function harnessQuery({ view = 'main', theme = 'light', seed = {}, dockWidth, session, host }) {
+export function harnessQuery({ view = 'main', theme = 'light', seed = {}, dockWidth, session, host, assetfail }) {
   return new URLSearchParams({
     view,
     theme,
@@ -144,5 +144,7 @@ export function harnessQuery({ view = 'main', theme = 'light', seed = {}, dockWi
     ...(session ? { session } : {}),
     // `old` makes the harness answer like the first release's host (see preview-server.mjs).
     ...(host ? { host } : {}),
+    // Figure downloads fail the way the host reports a failed download (see preview-server.mjs).
+    ...(assetfail ? { assetfail: '1' } : {}),
   }).toString();
 }

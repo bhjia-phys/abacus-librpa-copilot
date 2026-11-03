@@ -187,6 +187,8 @@ const HARNESS = `<!doctype html>
 <script>
   window.__afParams = new URLSearchParams(location.search);
   if (__afParams.get('theme') === 'dark') document.body.setAttribute('data-ds-dark-theme', '');
+  // ?assetfail=1: the server answers figure downloads with the host's 502 (see the server below).
+  document.cookie = 'af-assetfail=' + (__afParams.get('assetfail') === '1' ? '1' : '0') + '; path=/';
   if (__afParams.get('reset') === '1') localStorage.clear();
   var seed = __afParams.get('seed');
   if (seed) {
@@ -368,6 +370,12 @@ export async function startPreviewServer(options = {}) {
       res.end(body);
     };
     try {
+      // ?assetfail=1 (set as a cookie by the harness, since an <img> request carries nothing
+      // else): answer figure downloads the way the host answers a failed one.
+      if (url.pathname === '/abacusflow/api/library/asset' && /(?:^|;\s*)af-assetfail=1/.test(req.headers.cookie || '')) {
+        res.writeHead(502, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+        return void res.end(JSON.stringify({ error: '数据集镜像都没有取回这个文件：huggingface.co 超时（25 秒）；hf-mirror.com 连接失败（ECONNRESET）' }));
+      }
       if (routes.has(url.pathname)) return void routes.get(url.pathname)(req, res);
       if (url.pathname === '/') return send(200, 'text/html; charset=utf-8', HARNESS);
       if (url.pathname === '/client.js') return send(200, 'text/javascript; charset=utf-8', readFileSync(join(pkgRoot, 'lib', 'client.js')));

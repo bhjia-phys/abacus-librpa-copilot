@@ -2,7 +2,7 @@
   "name": "@local/abacusflow",
   "version": "0.1.0",
   "private": true,
-  "description": "ABACUS + LibRPA research assistant for DeepSeek Harness: task scanning, SCF convergence, crystal structure viewer, LibRPA/QSGW output inspection, and abacus_*/librpa_* agent tools.",
+  "description": "ABACUS-LibRPA Copilot for DeepSeek Harness: ABACUS + LibRPA (DFT -> GW/QSGW) pipeline view, band and gap comparisons with provenance, per-stage diagnosis, LibRPA-database comparison, and abacus_*/librpa_* agent tools.",
   "type": "module",
   "exports": {
     ".": "./lib/index.js",

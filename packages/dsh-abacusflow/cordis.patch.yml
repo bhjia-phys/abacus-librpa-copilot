@@ -1,4 +1,4 @@
-# dsh-abacusflow bundle patch.
+# ABACUS-LibRPA Copilot (package @local/abacusflow) bundle patch.
 #
 # Mounts the ABACUS/LibRPA plugin into the host composition of a DSH profile.
 # The host half exposes /abacusflow/api/* HTTP routes (scan / task-bundle / file)

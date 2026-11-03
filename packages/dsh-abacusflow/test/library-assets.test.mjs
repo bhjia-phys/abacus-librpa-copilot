@@ -24,6 +24,7 @@ import {
   assetQuantity,
   fetchAsset,
   publishedBandChannel,
+  mirrorOf,
 } from '../lib/host/library-assets.js';
 import { loadLibrary, matchTask } from '../lib/host/library.js';
 import { localData } from '../scripts/lib/local-data.mjs';
@@ -289,4 +290,55 @@ test('a file that is not a LibRPA band table is refused with a reason, not plott
   const ch = publishedBandChannel('# k  E1 E2\n0.0 -1.0 1.0\n', { label: 'x.dat', quantity: 'GW', spin: 1, path: 'x.dat' });
   assert.equal(ch.ok, false);
   assert.match(ch.error, /LibRPA 能带行/);
+});
+
+// ------------------------------------------------ mirror fallback (live failure) ---
+//
+// In live use a figure failed to load in the panel and came through 2 s later: downloads from
+// abroad are unreliable here. A failed attempt is retried once on the other mirror, which
+// serves the dataset under identical paths.
+
+const SVG_URL = 'https://huggingface.co/datasets/AroundPeking/LibRPA-database/resolve/339cc46/data/calculations/3d/KCl/kcl-jctc-aims-gw/figures/gw_frontier.svg';
+const fakeFetch = (plan) => {
+  const calls = [];
+  const impl = async (url) => {
+    calls.push(new URL(url).hostname);
+    const step = plan[calls.length - 1];
+    if (step instanceof Error) throw step;
+    return new Response(step.body ?? '', { status: step.status ?? 200, statusText: step.statusText ?? '' });
+  };
+  return { impl, calls };
+};
+
+test('the other mirror has the same path', () => {
+  assert.equal(mirrorOf(SVG_URL), SVG_URL.replace('huggingface.co', 'hf-mirror.com'));
+  assert.equal(mirrorOf(SVG_URL.replace('huggingface.co', 'hf-mirror.com')), SVG_URL);
+  assert.equal(mirrorOf('https://example.com/x.svg'), null);
+});
+
+test('a failed download is retried on the other mirror, and cached under the record URL', async () => {
+  const cacheDir = mkdtempSync(join(tmpdir(), 'abacusflow-mirror-'));
+  try {
+    const net = fakeFetch([Object.assign(new TypeError('fetch failed'), { cause: { code: 'ETIMEDOUT' } }), { body: '<svg xmlns="http://www.w3.org/2000/svg"/>' }]);
+    const got = await fetchAsset({ cacheDir, url: SVG_URL, fetchImpl: net.impl });
+    assert.equal(got.ok, true);
+    assert.deepEqual(net.calls, ['huggingface.co', 'hf-mirror.com']);
+    assert.equal(got.mirror, true);
+    assert.equal(got.contentType, 'image/svg+xml');
+    const again = await fetchAsset({ cacheDir, url: SVG_URL, fetchImpl: async () => { throw new Error('offline'); } });
+    assert.equal(again.cached, true, 'the next look is served from the cache, keyed by the record URL');
+  } finally {
+    rmSync(cacheDir, { recursive: true, force: true });
+  }
+});
+
+test('a missing object is not retried; when both mirrors fail, both reasons are reported', async () => {
+  const missing = fakeFetch([{ status: 404, statusText: 'Not Found' }]);
+  const notFound = await fetchAsset({ url: SVG_URL, fetchImpl: missing.impl });
+  assert.equal(notFound.ok, false);
+  assert.deepEqual(missing.calls, ['huggingface.co'], 'a 404 is the object\'s answer, not the network\'s');
+  const down = fakeFetch([{ status: 503, statusText: 'Service Unavailable' }, Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } })]);
+  const both = await fetchAsset({ url: SVG_URL, fetchImpl: down.impl });
+  assert.equal(both.ok, false);
+  assert.match(both.error, /huggingface\.co 返回 503.*hf-mirror\.com 连接失败（ECONNRESET）/);
 });

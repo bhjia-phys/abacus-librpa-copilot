@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "ABACUS Research Assistant",
-    "description": "Scan ABACUS and LibRPA tasks, inspect SCF convergence, crystal structures, effective input parameters and QSGW output."
+    "title": "ABACUS-LibRPA Copilot",
+    "description": "ABACUS + LibRPA (DFT → GW / QSGW) workbench: pipeline view, band and gap comparisons with provenance, per-stage diagnosis, LibRPA-database comparison, and abacus_* / librpa_* agent tools."
   }
 }

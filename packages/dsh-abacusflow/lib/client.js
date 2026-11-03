@@ -1,6 +1,6 @@
 /* global window, document, localStorage, fetch, ResizeObserver, console, navigator */
 /**
- * dsh-abacusflow — browser half.
+ * ABACUS-LibRPA Copilot (package @local/abacusflow) — browser half.
  *
  * Dialect: the DSH 0.2 client module loader. The shell evaluates this file as a script
  * whose only dependency is `require('react')`; there is no antd, no three.js, no recharts
@@ -420,11 +420,46 @@ window.__ModuleLoader__.load({
       .af-lib-fig { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
       /* Published figures are drawn on white; they keep their paper in both themes. */
       .af-lib-frame {
-        display: flex; align-items: center; justify-content: center; min-height: 120px;
+        position: relative; display: flex; align-items: center; justify-content: center; min-height: 120px;
         border: 1px solid var(--af-line); border-radius: var(--af-r2); background: var(--af-paper); overflow: hidden;
       }
       .af-lib-img { display: block; width: 100%; height: auto; }
-      .af-lib-frame[data-placeholder] { background: var(--af-fill); color: var(--af-fg-3); font: var(--af-t-caption); padding: var(--af-s4); text-align: center; }
+      /* While a figure downloads, the frame follows the theme and says so; the paper comes with the plot. */
+      .af-lib-frame[data-loading] { min-height: 220px; background: var(--af-fill); }
+      .af-lib-frame[data-loading] .af-lib-img { opacity: 0; }
+      .af-lib-wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--af-fg-3); font: var(--af-t-caption); }
+      .af-lib-frame[data-placeholder] {
+        flex-direction: column; gap: 6px; min-height: 0; padding: var(--af-s4);
+        background: var(--af-fill); color: var(--af-fg-2); font: var(--af-t-caption); text-align: center;
+      }
+      .af-lib-why { display: inline-flex; align-items: center; gap: 6px; max-width: 560px; color: var(--af-fg-3); overflow-wrap: anywhere; }
+      .af-lib-actions { display: flex; align-items: center; gap: var(--af-s3); margin-top: 2px; }
+
+      /* ---- a database record: its numbers first, then readable facts ---- */
+      .af-rec { display: flex; flex-direction: column; gap: var(--af-s2); padding: var(--af-s1) 0 var(--af-s2); min-width: 0; }
+      .af-rec-gaps { display: flex; flex-wrap: wrap; gap: var(--af-s2); }
+      .af-rec-gap {
+        display: flex; flex-direction: column; min-width: 112px; padding: 6px var(--af-s3);
+        border: 1px solid var(--af-line); border-radius: var(--af-r2); background: var(--af-surface);
+      }
+      .af-rec-gap-k { font: var(--af-t-micro); color: var(--af-fg-3); }
+      .af-rec-gap-v { font: 600 15px/22px var(--af-mono); color: var(--af-fg); font-variant-numeric: tabular-nums; }
+      .af-rec-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px var(--af-s3); margin: 0; font: var(--af-t-caption); }
+      .af-rec-facts dt { color: var(--af-fg-3); }
+      .af-rec-facts dd { margin: 0; min-width: 0; color: var(--af-fg); overflow-wrap: anywhere; }
+      .af-rec-scope { font: var(--af-t-caption); color: var(--af-fg-2); }
+      .af-rec-scope p { margin: 0; }
+      .af-rec-scope p[data-clamp] { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .af-rec-more { margin-top: 2px; color: var(--af-accent); font: var(--af-t-caption); }
+      .af-disclosure { border-top: 1px solid var(--af-line-soft); }
+      .af-disclosure-head {
+        display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 4px; border: 0; border-radius: var(--af-r1);
+        background: none; color: var(--af-fg); font: var(--af-t-caption); text-align: left; cursor: pointer;
+      }
+      .af-disclosure-head:hover { background: var(--af-hover); }
+      .af-disclosure-title { font-weight: 600; }
+      .af-disclosure-meta { color: var(--af-fg-3); }
+      .af-disclosure-body { padding: 2px 0 var(--af-s2) 18px; }
       .af-lib-cap { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px var(--af-s2); font: var(--af-t-caption); color: var(--af-fg-2); min-width: 0; }
       .af-lib-cap-text { flex: 1 1 200px; min-width: 0; color: var(--af-fg); }
       .af-kind { font: var(--af-t-micro); color: var(--af-fg-3); letter-spacing: .03em; }
@@ -595,8 +630,9 @@ window.__ModuleLoader__.load({
         border: 0; background: none; text-align: left; cursor: pointer; font: var(--af-t-caption);
       }
       .af-lib-record-head:hover { background: var(--af-hover); }
-      .af-lib-id { font: 600 12px/18px var(--af-mono); }
-      .af-lib-detail { display: flex; flex-direction: column; gap: 2px; padding: 0 0 var(--af-s2) var(--af-s3); border-left: 2px solid var(--af-line); margin-bottom: var(--af-s2); }
+      .af-lib-formula { font: 600 13px/20px var(--af-font); color: var(--af-fg); }
+      .af-lib-id { font: 400 11px/18px var(--af-mono); color: var(--af-fg-3); }
+      .af-lib-detail { display: flex; flex-direction: column; gap: var(--af-s2); padding: 0 0 var(--af-s3) var(--af-s4); border-left: 2px solid var(--af-line); margin: 0 0 var(--af-s2) 5px; }
       .af-conf { font: var(--af-t-micro); padding: 1px 6px; border-radius: 999px; background: var(--af-fill); color: var(--af-fg-2); }
       .af-conf[data-c="high"] { color: var(--af-fg); background: var(--af-ok-soft); }
       .af-conf[data-c="medium"] { background: var(--af-warn-soft); }
@@ -669,6 +705,14 @@ window.__ModuleLoader__.load({
      * logic that decides what the panel *claims* — stage states, lineage, alignment, which
      * file a number came from, the message handed to the agent — is tested by behaviour.
      */
+
+    /**
+     * The plugin's name as people see it: the panel title, the sidebar entry, the dock tab and
+     * the header of every message handed to the agent. The package id (`@local/abacusflow`),
+     * its routes and its storage keys keep the original name, so an installed DSH profile and
+     * a browser's remembered state carry over unchanged.
+     */
+    const PANEL_NAME = 'ABACUS-LibRPA Copilot';
 
     const KIND_LABEL = { abacus: 'ABACUS', librpa: 'LibRPA', coupled: 'ABACUS+LibRPA' };
     const PRODUCER_LABEL = { abacus: 'ABACUS', librpa: 'LibRPA', db: '数据库' };
@@ -1451,7 +1495,7 @@ window.__ModuleLoader__.load({
       const task = bundle && bundle.task ? bundle.task : null;
       if (!task) return '';
       const lines = [];
-      lines.push('【来自 ABACUS 面板】');
+      lines.push(`【来自 ${PANEL_NAME}】`);
       lines.push(`任务：${task.absPath}`);
       lines.push(`类型：${KIND_LABEL[task.kind] || task.kind}${bundle.status ? `，状态 ${bundle.status.label}` : ''}`);
       if (bundle.abacus) {
@@ -1507,7 +1551,7 @@ window.__ModuleLoader__.load({
     function buildHandoffMessage(input) {
       const { run, stages, ledger, research, intent, note } = input || {};
       const lines = [];
-      lines.push('【来自 ABACUS 面板 · 交给 Agent】');
+      lines.push(`【来自 ${PANEL_NAME} · 交给 Agent】`);
       if (intent && intent.text) lines.push(`想解决的问题：${intent.text}`);
       if (run) {
         lines.push(`运行：${run.name}`);
@@ -1555,7 +1599,7 @@ window.__ModuleLoader__.load({
     function buildDiagnosisMessage(input) {
       const { run, stage, state, diagnosis } = input || {};
       const d = diagnosis || {};
-      const lines = ['【来自 ABACUS 面板 · 阶段诊断】'];
+      const lines = [`【来自 ${PANEL_NAME} · 阶段诊断】`];
       if (run) lines.push(`运行：${run.name}`);
       if (stage) lines.push(`阶段：${stage.rel || stage.name}${state ? ` · ${state.label}` : ''}`);
       if (stage && stage.task) lines.push(`目录：${stage.task.absPath}`);
@@ -1819,6 +1863,24 @@ window.__ModuleLoader__.load({
           deltaEv: p.local && isNum(p.publishedEv) ? p.local.valueEv - p.publishedEv : null,
           caveats: p.caveats,
         }));
+    }
+
+    // ------------------------------------------------------ record wording ---
+
+    /** Programs as their authors spell them (a record's `software` keys and `workflow.frontend`). */
+    const FRONTEND_LABEL = { abacus: 'ABACUS', librpa: 'LibRPA', fhi_aims: 'FHI-aims', vasp: 'VASP', qe: 'Quantum ESPRESSO' };
+
+    /** The three `scientific_status` values the database uses, in words; others keep their own. */
+    const RECORD_STATUS_LABEL = {
+      journal_supporting_information_path_gap: '期刊补充材料中的路径能隙',
+      historical_reference_bounded_gap_comparison: '历史参考：限定条件下的能隙对照',
+      completed_finite_qp_table: '完整的有限准粒子能量表',
+    };
+
+    /** A record's status for reading; an unknown value is shown as its own words, never dropped. */
+    function recordStatusLabel(status) {
+      const text = String(status ?? '');
+      return RECORD_STATUS_LABEL[text] || text.replace(/_/g, ' ');
     }
 
     // ----------------------------------------------------------- host version ---
@@ -5266,11 +5328,11 @@ window.__ModuleLoader__.load({
                 '图由数据库上游按需取回（不下载整库）。基组、k 网格与程序版本可能与你的运行不同，仅作参照。')
             : null),
         audits.length > 0
-          ? h(Section, { title: '图的审计与来源', meta: `${audits.length} 个 JSON · 不是图，是图的出处与映射`, collapsible: true, defaultOpen: false },
+          ? h(Disclosure, { title: '图的审计与来源', meta: `${audits.length} 个 JSON：图的出处与数据映射` },
               audits.map((item) => h(LibraryAudit, { key: item.url || item.label, item })))
           : null,
         bandData.length > 0
-          ? h(Section, { title: '能带数据', meta: `${bandData.length} 个表 · LibRPA 格式（k 点 + 占据/能量）`, collapsible: true, defaultOpen: false },
+          ? h(Disclosure, { title: '能带数据', meta: `${bandData.length} 个表（LibRPA 格式）` },
               h('div', { className: 'af-lib-rows' },
                 bandData.map((item) =>
                   h('div', { key: item.url || item.label, className: 'af-lib-row' },
@@ -5282,6 +5344,17 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /** A closed-by-default detail inside a record: a light row, not a page section. */
+    function Disclosure(props) {
+      const [open, setOpen] = useState(Boolean(props.defaultOpen));
+      return h('div', { className: 'af-disclosure' },
+        h('button', { type: 'button', className: 'af-disclosure-head', 'aria-expanded': open ? 'true' : 'false', onClick: () => setOpen(!open) },
+          h(Icon16, { name: open ? 'chevronDown' : 'chevronRight', size: 12 }),
+          h('span', { className: 'af-disclosure-title' }, props.title),
+          props.meta ? h('span', { className: 'af-disclosure-meta' }, props.meta) : null),
+        open ? h('div', { className: 'af-disclosure-body' }, props.children) : null);
+    }
+
     /** A link to the dataset mirror, opened outside the panel; nothing when the URL was refused. */
     function ExternalLink(props) {
       if (!props.url) return h('span', { className: 'af-kind', title: '记录里的地址不是 https 的数据库镜像，面板不打开它' }, '地址未通过校验');
@@ -5291,23 +5364,47 @@ window.__ModuleLoader__.load({
     /** One published plot: the image (SVG/PNG) on its paper, its caption, the PDF beside it. */
     function LibraryFigure(props) {
       const { card, recordId } = props;
-      const [failed, setFailed] = useState(false);
+      // idle → loaded, or failed with the host's reason. `attempt` re-requests on 重试.
+      const [view, setView] = useState({ phase: 'loading', reason: '' });
+      const [attempt, setAttempt] = useState(0);
       const image = card.image;
+      const src = image && image.url ? `${API}/library/asset?url=${encodeURIComponent(image.url)}${attempt ? `&attempt=${attempt}` : ''}` : null;
+      const retry = () => {
+        setView({ phase: 'loading', reason: '' });
+        setAttempt(attempt + 1);
+      };
+      const failed = () => {
+        // An <img> cannot read why it failed. Ask the same URL once by fetch: the host answers a
+        // failed download with its reason; if the download has meanwhile succeeded, just show it.
+        setView({ phase: 'failed', reason: '' });
+        fetch(src)
+          .then((response) => (response.ok ? null : response.json().then((body) => body.error || `HTTP ${response.status}`, () => `HTTP ${response.status}`)))
+          .then((reason) => (reason === null ? retry() : setView({ phase: 'failed', reason })), (error) => setView({ phase: 'failed', reason: String(error.message || error) }));
+      };
       let frame;
-      if (image && image.url && !failed) {
-        frame = h('div', { className: 'af-lib-frame' },
+      if (src && view.phase !== 'failed') {
+        frame = h('div', { className: 'af-lib-frame', 'data-loading': view.phase === 'loading' ? '' : undefined },
+          view.phase === 'loading' ? h('div', { className: 'af-lib-wait' }, h(Spinner), '正在从数据集取图…') : null,
           h('img', {
+            key: attempt,
             className: 'af-lib-img',
-            src: `${API}/library/asset?url=${encodeURIComponent(image.url)}`,
+            src,
             alt: `${recordId} · ${card.caption}`,
             loading: 'lazy',
-            onError: () => setFailed(true),
+            onLoad: () => setView({ phase: 'loaded', reason: '' }),
+            onError: failed,
           }));
+      } else if (src) {
+        frame = h('div', { className: 'af-lib-frame', 'data-placeholder': '' },
+          h('div', null, '这张图没能取回。'),
+          view.reason ? h('div', { className: 'af-lib-why' }, view.reason) : h('div', { className: 'af-lib-why' }, h(Spinner), '查原因…'),
+          h('div', { className: 'af-lib-actions' },
+            h(Btn, { size: 'sm', icon: 'refresh', onClick: retry }, '重试'),
+            h(ExternalLink, { url: image.url }, '在浏览器里打开')));
       } else {
         const why = image && !image.url ? '图的地址没有通过校验，面板不取它。'
-          : failed ? '图没能取回（上游或缓存出错）。可以用下面的链接直接打开。'
-            : card.pdf ? '这张图只有 PDF 版本，面板里不内嵌，用链接打开。'
-              : '这个格式面板里不显示，用链接打开。';
+          : card.pdf ? '这张图只有 PDF 版本，面板里不内嵌，用链接打开。'
+            : '这个格式面板里不显示，用链接打开。';
         frame = h('div', { className: 'af-lib-frame', 'data-placeholder': '' }, why);
       }
       const kinds = [image && image.kind, card.pdf && 'pdf', ...card.files.map((f) => f.kind)].filter(Boolean);
@@ -5383,11 +5480,19 @@ window.__ModuleLoader__.load({
       const { record, open, onToggle } = props;
       return h(
         'div',
-        { className: 'af-lib-record' },
+        { className: 'af-lib-record', 'data-open': open ? '' : undefined },
         h(
           'button',
-          { type: 'button', className: 'af-lib-record-head', onClick: onToggle, 'aria-expanded': open ? 'true' : 'false' },
+          {
+            type: 'button',
+            className: 'af-lib-record-head',
+            onClick: onToggle,
+            'aria-expanded': open ? 'true' : 'false',
+            // The record file is for the curious, not a line of the view.
+            title: record.path ? `记录文件：${record.path}` : undefined,
+          },
           h(Icon16, { name: open ? 'chevronDown' : 'chevronRight', size: 12 }),
+          h('span', { className: 'af-lib-formula' }, record.formula || record.material || '—'),
           h('span', { className: 'af-lib-id' }, record.id),
           record.dimension ? h('span', { className: 'af-chip' }, record.dimension) : null,
           isNum(record.gwGapEv) ? h('span', { className: 'af-num' }, `GW ${record.gwGapEv.toFixed(3)} eV`) : null,
@@ -5399,14 +5504,62 @@ window.__ModuleLoader__.load({
         ),
         open
           ? h('div', { className: 'af-lib-detail' },
-              record.scope ? h('div', { className: 'af-hint' }, `适用范围：${record.scope}`) : null,
-              record.scientificStatus ? h('div', { className: 'af-hint' }, `科学状态：${record.scientificStatus}`) : null,
-              record.species && record.species.length ? h('div', { className: 'af-hint' }, `物种：${record.species.map((s) => `${s.element}${s.nao ? ` (${s.nao})` : ''}`).join(' · ')}`) : null,
-              record.abacusCommit || record.librpaCommit ? h('div', { className: 'af-hint' }, `来源版本：ABACUS ${record.abacusCommit || '未记录'} / LibRPA ${record.librpaCommit || '未记录'}`) : null,
-              record.path ? h('div', { className: 'af-src' }, record.path) : null,
+              h(RecordSummary, { record }),
               // Mounted only while open: the asset listing (and any figure) is fetched on
               // demand, so a list of 100 records costs nothing until one is opened.
               h(LibraryAssets, { id: record.id }))
+          : null,
+      );
+    }
+
+    /**
+     * What a reader wants first from a record: its numbers, what kind of result it is, which
+     * programs and basis produced it, and its own statement of scope — in readable form. The
+     * record's raw field values stay available (the status as a tooltip, the file path on the
+     * row's title), they are just not the page.
+     */
+    function RecordSummary(props) {
+      const r = props.record;
+      const [full, setFull] = useState(false);
+      const gaps = [['GW 能隙', r.gwGapEv], ['EXX 能隙', r.exxGapEv], ['DFT 能隙', r.dftGapEv]].filter(([, v]) => isNum(v));
+      const programs = (r.software || []).length
+        ? r.software.map((s) => `${FRONTEND_LABEL[s.name] || s.name}${s.commit ? ` ${s.commit}` : ''}`).join(' · ')
+        : [r.abacusCommit ? `ABACUS ${r.abacusCommit}` : null, r.librpaCommit ? `LibRPA ${r.librpaCommit}` : null].filter(Boolean).join(' · ');
+      const species = (r.species || []).filter((s) => s.element);
+      // The scope is clamped to two lines; 展开全文 appears only when the text really is cut.
+      const scopeRef = useRef(null);
+      const [cut, setCut] = useState(false);
+      React.useLayoutEffect(() => {
+        const el = scopeRef.current;
+        if (el && !full) setCut(el.scrollHeight > el.clientHeight + 1);
+      }, [r.scope, full]);
+      const longScope = cut || full;
+      const fact = (label, value, title) => (value ? [h('dt', { key: `${label}-k` }, label), h('dd', { key: `${label}-v`, title }, value)] : null);
+      return h(
+        'div',
+        { className: 'af-rec' },
+        gaps.length
+          ? h('div', { className: 'af-rec-gaps' },
+              gaps.map(([label, value]) => h('div', { key: label, className: 'af-rec-gap' },
+                h('span', { className: 'af-rec-gap-k' }, label),
+                h('span', { className: 'af-rec-gap-v' }, `${value.toFixed(3)} eV`))))
+          : isNum(r.value)
+            ? h('div', { className: 'af-rec-gaps' },
+                h('div', { className: 'af-rec-gap' },
+                  h('span', { className: 'af-rec-gap-k' }, r.observable || '数值'),
+                  h('span', { className: 'af-rec-gap-v' }, `${fmtNum(r.value, 4)} ${r.unit || ''}`)))
+            : null,
+        h('dl', { className: 'af-rec-facts' },
+          fact('结果', r.observable),
+          fact('性质', r.scientificStatus ? recordStatusLabel(r.scientificStatus) : null, r.scientificStatus || undefined),
+          fact('程序', programs || null),
+          fact('物种', species.length
+            ? species.map((s) => `${s.element}${s.nao ? `：${baseName(s.nao)}` : ''}`).join('  ·  ')
+            : null)),
+        r.scope
+          ? h('div', { className: 'af-rec-scope' },
+              h('p', { ref: scopeRef, 'data-clamp': full ? undefined : '' }, r.scope),
+              longScope ? h('button', { type: 'button', className: 'af-linklike af-rec-more', onClick: () => setFull(!full) }, full ? '收起' : '展开全文') : null)
           : null,
       );
     }
@@ -5798,7 +5951,7 @@ window.__ModuleLoader__.load({
       const context = focus
         ? {
             title: `${run.name} / ${focus.rel || focus.name} · ${(states[focus.id] || {}).label || ''}`,
-            prefix: focusBundle ? buildAskContext(focusBundle, extra) : `【来自 ABACUS 面板】\n任务：${focus.task.absPath}\n${extra}\n\n`,
+            prefix: focusBundle ? buildAskContext(focusBundle, extra) : `【来自 ${PANEL_NAME}】\n任务：${focus.task.absPath}\n${extra}\n\n`,
             quick: quickPrompts(states),
           }
         : null;
@@ -6124,7 +6277,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'af-toolbar-row' },
-          !narrow ? h('span', { className: 'af-toolbar-title' }, h(Icon, { size: 16 }), 'ABACUS · LibRPA') : null,
+          !narrow ? h('span', { className: 'af-toolbar-title' }, h(Icon, { size: 16 }), PANEL_NAME) : null,
           h(
             'div',
             { className: 'af-tabs', role: 'tablist', 'aria-label': '面板位置' },
@@ -6502,12 +6655,12 @@ window.__ModuleLoader__.load({
                 id: PANEL_KEY,
                 kind: PANEL_KEY,
                 priority: 'extension',
-                title: () => 'ABACUS',
+                title: () => PANEL_NAME,
                 guide: [
                   {
                     id: PANEL_KEY,
                     order: 62,
-                    title: () => 'ABACUS',
+                    title: () => PANEL_NAME,
                     description: () => 'ABACUS → LibRPA 流水线：能带对比、收敛、k 收敛研究与数据库对照',
                   },
                 ],
@@ -6532,7 +6685,7 @@ window.__ModuleLoader__.load({
           ctx.slots.inject('sidebar.panellist', () => {
             registerDock();
             return ctx.slots.register(
-              { name: 'sidebar.panellist', id: PANEL_KEY, order: 62, label: () => 'ABACUS' },
+              { name: 'sidebar.panellist', id: PANEL_KEY, order: 62, label: () => PANEL_NAME },
               Icon,
             );
           });

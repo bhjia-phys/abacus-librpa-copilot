@@ -32,6 +32,7 @@ const EXPORTS = [
   'groupFigures', 'jsonOutline', 'fmtBytes', 'buildDiagnosisMessage', 'DIAGNOSIS_GLYPH',
   'methodFamily', 'recordSpinFacts', 'localCompareFacts', 'compareWithRecord', 'gapComparison', 'baseName',
   'hostLag', 'HOST_FEATURES_NEEDED', 'assetKindOf', 'assetQuantityOf', 'assetStemOf', 'assetSpinOf',
+  'recordStatusLabel', 'FRONTEND_LABEL', 'PANEL_NAME',
 ];
 // Wrapped in a function and run in this context, so arrays and objects share this realm's
 // prototypes (deepStrictEqual compares them) and nothing leaks into the global scope.
@@ -612,7 +613,9 @@ test('the diagnosis handed to the agent keeps every quoted line with its file an
   };
   const stage = { rel: 'run', name: 'run', task: { absPath: `${ROOT}\\bi2se3-soc-qsgw-option5\\run` } };
   const message = P.buildDiagnosisMessage({ run: { name: 'bi2se3-soc-qsgw-option5' }, stage, state: { label: '运行中' }, diagnosis });
-  assert.match(message, /^【来自 ABACUS 面板 · 阶段诊断】/);
+  // Updated deliberately: the plugin is now called ABACUS-LibRPA Copilot (PANEL_NAME), and the
+  // header tells the agent which tool the message came from.
+  assert.match(message, /^【来自 ABACUS-LibRPA Copilot · 阶段诊断】/);
   assert.match(message, /结论：运行被终止/);
   assert.match(message, /- librpa\.err 第 1 行（作业被调度器取消（CANCELLED））：slurmstepd/);
   assert.match(message, /- librpa\.out 第 20012 行/);
@@ -786,4 +789,11 @@ test('the host announces every feature the panel needs', () => {
   assert.ok(m, 'HOST_FEATURES declared in lib/index.js');
   const announced = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
   assert.deepEqual(P.hostLag({ features: announced }).missing, [], `host announces ${announced.join(', ')}`);
+});
+
+test('record wording: known statuses read as words, unknown ones keep their own words', () => {
+  assert.equal(P.recordStatusLabel('journal_supporting_information_path_gap'), '期刊补充材料中的路径能隙');
+  assert.equal(P.recordStatusLabel('some_new_status'), 'some new status', 'never dropped, only made readable');
+  assert.equal(P.FRONTEND_LABEL.fhi_aims, 'FHI-aims');
+  assert.equal(P.PANEL_NAME, 'ABACUS-LibRPA Copilot');
 });

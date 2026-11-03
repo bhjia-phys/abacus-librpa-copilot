@@ -1,4 +1,7 @@
-# dsh-abacusflow
+# ABACUS-LibRPA Copilot
+
+*Formerly `dsh-abacusflow`. The DSH package id is still `@local/abacusflow`, so existing installs
+keep working.*
 
 An **ABACUS + LibRPA research workbench** for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai):
 a panel that shows DFT → GW / QSGW calculations as producer → consumer pipelines and opens on

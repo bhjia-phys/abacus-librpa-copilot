@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "ABACUS 计算助手",
-    "description": "扫描 ABACUS 与 LibRPA 计算任务，查看 SCF 收敛曲线、晶体结构、输入参数与 QSGW 输出。"
+    "title": "ABACUS-LibRPA Copilot",
+    "description": "ABACUS + LibRPA（DFT → GW / QSGW）计算工作台：流水线视图、注明来源的能带与能隙对比、阶段诊断、LibRPA 数据库对照，以及 abacus_* / librpa_* Agent 工具。"
   }
 }

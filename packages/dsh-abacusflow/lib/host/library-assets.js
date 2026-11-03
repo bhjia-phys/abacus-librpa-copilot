@@ -35,8 +35,11 @@ const ALLOWED_HOSTS = new Set([
   'hf-mirror.com',
 ]);
 
-/** How long a single fetch may take. Figures are a few hundred KB; band files ~1.3 MB. */
-const FETCH_TIMEOUT_MS = 60_000;
+/**
+ * How long one attempt may take. Figures are a few hundred KB; band files ~1.3 MB. Two
+ * attempts (the record's mirror, then the other one) stay under the old single 60 s wait.
+ */
+const FETCH_TIMEOUT_MS = 25_000;
 
 /** Cap the on-disk cache. 200 objects covers every figure in the database plus spare. */
 const MAX_CACHED_OBJECTS = 200;
@@ -69,11 +72,38 @@ function cacheKey(url) {
 }
 
 /**
+ * The same object on the other known mirror. `huggingface.co` and `hf-mirror.com` serve the
+ * dataset under identical paths (checked byte for byte on a record's figure), so a failed
+ * download on one can be retried on the other without leaving the allow-list.
+ *
+ * @param {string} url an allowed asset URL
+ * @returns {string|null}
+ */
+export function mirrorOf(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const other = parsed.hostname === 'huggingface.co' ? 'hf-mirror.com' : parsed.hostname === 'hf-mirror.com' ? 'huggingface.co' : null;
+  if (!other) return null;
+  parsed.hostname = other;
+  return parsed.toString();
+}
+
+/**
  * Fetch one asset, using and filling the disk cache.
  *
- * @param {{ cacheDir:string, url:string, maxBytes?:number }} options
+ * Downloads from abroad are unreliable on the network this runs on (a figure that failed in
+ * the panel came through 2 s later), so a failed attempt — timeout, connection error, 5xx or
+ * 429 — is retried once on the other mirror. A 4xx other than 429 is the object's answer, not
+ * the network's, and is not retried. Failures are never cached.
+ *
+ * @param {{ cacheDir:string, url:string, maxBytes?:number, timeoutMs?:number, fetchImpl?:Function }} options
+ *   `fetchImpl` replaces the global fetch (tests).
  * @returns {Promise<{ ok:boolean, bytes?:Buffer, contentType?:string, cached?:boolean,
- *                     url?:string, error:string }>}
+ *                     url?:string, mirror?:boolean, error:string }>}
  */
 export async function fetchAsset(options) {
   const { cacheDir } = options;
@@ -82,6 +112,7 @@ export async function fetchAsset(options) {
     return { ok: false, error: `拒绝的地址（只允许 https + 已知数据库镜像）：${options.url}`, };
   }
 
+  // Keyed by the URL the record names, whichever mirror delivered the bytes.
   if (cacheDir) {
     const path = join(cacheDir, cacheKey(url));
     if (existsSync(path)) {
@@ -94,42 +125,51 @@ export async function fetchAsset(options) {
     }
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { signal: controller.signal, redirect: 'follow' });
-    if (!response.ok) {
-      return { ok: false, error: `上游返回 ${response.status} ${response.statusText}`, url };
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const limit = options.maxBytes ?? 32 * 1024 * 1024;
-    if (buffer.length > limit) {
-      return { ok: false, error: `对象过大（${buffer.length} > ${limit} 字节）`, url };
-    }
-    if (cacheDir) {
-      try {
-        mkdirSync(cacheDir, { recursive: true });
-        writeFileSync(join(cacheDir, cacheKey(url)), buffer);
-        pruneCache(cacheDir);
-      } catch {
-        // A cache write failure must not fail the fetch.
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS;
+  const limit = options.maxBytes ?? 32 * 1024 * 1024;
+  const failures = [];
+  for (const candidate of [url, mirrorOf(url)].filter(Boolean)) {
+    const host = new URL(candidate).hostname;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(candidate, { signal: controller.signal, redirect: 'follow' });
+      if (!response.ok) {
+        failures.push(`${host} 返回 ${response.status} ${response.statusText || ''}`.trim());
+        if (response.status >= 400 && response.status < 500 && response.status !== 429) break;
+        continue;
       }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > limit) {
+        return { ok: false, error: `对象过大（${buffer.length} > ${limit} 字节）`, url };
+      }
+      if (cacheDir) {
+        try {
+          mkdirSync(cacheDir, { recursive: true });
+          writeFileSync(join(cacheDir, cacheKey(url)), buffer);
+          pruneCache(cacheDir);
+        } catch {
+          // A cache write failure must not fail the fetch.
+        }
+      }
+      return {
+        ok: true,
+        bytes: buffer,
+        // The extension decides for known kinds, so a fresh fetch and a cache hit agree.
+        contentType: KIND_TYPES[assetKind(url)] || response.headers.get('content-type') || guessType(url),
+        cached: false,
+        url: candidate,
+        mirror: candidate !== url,
+        error: '',
+      };
+    } catch (error) {
+      failures.push(`${host} ${error?.name === 'AbortError' ? `超时（${Math.round(timeoutMs / 1000)} 秒）` : `连接失败（${String(error?.cause?.code || error?.message || error)}）`}`);
+    } finally {
+      clearTimeout(timer);
     }
-    return {
-      ok: true,
-      bytes: buffer,
-      // The extension decides for known kinds, so a fresh fetch and a cache hit agree.
-      contentType: KIND_TYPES[assetKind(url)] || response.headers.get('content-type') || guessType(url),
-      cached: false,
-      url,
-      error: '',
-    };
-  } catch (error) {
-    const message = error?.name === 'AbortError' ? `请求超时（${FETCH_TIMEOUT_MS} ms）` : String(error.message || error);
-    return { ok: false, error: message, url };
-  } finally {
-    clearTimeout(timer);
   }
+  return { ok: false, error: `数据集镜像都没有取回这个文件：${failures.join('；')}`, url };
 }
 
 /** Content types for the kinds a record holds; `assetKind` names them. */

@@ -70,7 +70,8 @@ const INSPECT = (id) => `(async () => {
   }
   // Leave the default tab showing for the screenshot.
   if (buttons.length) { buttons[buttons.length - 1].click(); await sleep(100); }
-  const sectionHeads = [...assets.querySelectorAll('.af-section-head-btn')];
+  // Audits and band tables sit in light disclosure rows inside the record.
+  const sectionHeads = [...assets.querySelectorAll('.af-disclosure-head')];
   const auditHead = sectionHeads.find((s) => s.textContent.includes('审计'));
   let outline = null;
   if (auditHead) {

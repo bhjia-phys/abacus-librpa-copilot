@@ -127,6 +127,9 @@ async function plan(base) {
     // A hot-reloaded panel against the first release's host (DSH not fully restarted)
     { name: '34-main-light-old-host-library', ...tall, theme: 'light', seed: ui({ place: 'library', libraryQuery: 'nio-aims-gw-int' }), host: 'old', actions: [openRecord('nio-aims-gw-int')] },
     { name: '35-dock-dark-old-host-diagnose', ...dockTall, theme: 'dark', seed: ui(diagnose(`${NIO}/qsgw`), NIO), host: 'old' },
+    // The record the user saw failing (KCl), as it reads now; and a download that fails
+    { name: '36-main-light-library-kcl', ...tall, theme: 'light', seed: ui({ place: 'library', libraryQuery: 'kcl-jctc-aims-gw' }), actions: [openRecord('kcl-jctc-aims-gw')] },
+    { name: '37-main-dark-library-download-failed', ...main, theme: 'dark', seed: ui({ place: 'library', libraryQuery: 'kcl-jctc-aims-gw' }), assetfail: true, actions: [openRecord('kcl-jctc-aims-gw')] },
   ];
 }
 

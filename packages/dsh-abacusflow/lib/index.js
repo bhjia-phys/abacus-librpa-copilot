@@ -600,7 +600,13 @@ export function apply(ctx, rawConfig) {
     const target = url.searchParams.get('url');
     if (!target) return send(400, { error: '缺少 url' });
     const fetched = await fetchAsset({ cacheDir: libraryCacheDir(), url: target });
-    if (!fetched.ok) return send(502, { error: fetched.error, url: target });
+    if (!fetched.ok) {
+      // A failed download is the network's state now, not the asset's: never let it be cached,
+      // so the panel's 重试 asks again.
+      res.writeHead(502, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ error: fetched.error, url: target }));
+      return;
+    }
     // Binary response: `send` is JSON-only, so write the bytes directly.
     const contentType = fetched.contentType || 'application/octet-stream';
     res.writeHead(200, {
