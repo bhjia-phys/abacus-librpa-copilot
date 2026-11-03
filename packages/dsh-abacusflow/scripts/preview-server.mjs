@@ -196,9 +196,37 @@ const HARNESS = `<!doctype html>
   // Idle detection for screenshots: no fetch in flight for 700 ms.
   (function () {
     var pending = 0, last = Date.now(), realFetch = window.fetch.bind(window);
-    window.fetch = function () {
+    // ?host=old answers like the first release's host, which a hot-reloaded panel can meet in a
+    // DSH that was not fully restarted: no feature list in /ping, asset items without
+    // kind/quantity/stem (audits among the figures), and no /diagnose or /library/band.
+    var oldHost = __afParams.get('host') === 'old';
+    var newRoute = /\\/abacusflow\\/api\\/(diagnose|library\\/band)\\b/;
+    var strip = function (item) {
+      var out = {};
+      for (var k in item) if (['kind', 'quantity', 'quantities', 'stem', 'spin', 'primary'].indexOf(k) < 0) out[k] = item[k];
+      return out;
+    };
+    var asOldHost = function (url, sent) {
+      if (!/\\/abacusflow\\/api\\/(ping|library\\/assets)\\b/.test(url)) return sent;
+      return sent.then(function (r) {
+        return r.json().then(function (body) {
+          if (/\\/ping/.test(url)) delete body.features;
+          else {
+            body.figures = (body.figures || []).concat(body.audits || []).map(strip);
+            delete body.audits;
+            body.bandData = (body.bandData || []).map(strip);
+          }
+          return new Response(JSON.stringify(body), { status: r.status, headers: { 'content-type': 'application/json' } });
+        });
+      });
+    };
+    window.fetch = function (input) {
       pending += 1; last = Date.now();
-      return realFetch.apply(null, arguments).finally(function () { pending -= 1; last = Date.now(); });
+      var url = typeof input === 'string' ? input : input.url;
+      var answer = oldHost && newRoute.test(url)
+        ? Promise.resolve(new Response('Not Found', { status: 404 }))
+        : oldHost ? asOldHost(url, realFetch.apply(null, arguments)) : realFetch.apply(null, arguments);
+      return answer.finally(function () { pending -= 1; last = Date.now(); });
     };
     window.__afIdle = function (quiet) {
       quiet = quiet || 700;

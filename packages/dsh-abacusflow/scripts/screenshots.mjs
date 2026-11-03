@@ -124,6 +124,9 @@ async function plan(base) {
     { name: '31-main-dark-published-nio', ...tall, theme: 'dark', seed: published({}, NIO), actions: [showPublished] },
     { name: '32-dock-light-published-bi2se3', ...dockTall, theme: 'light', seed: published({}, BI), actions: [showPublished] },
     { name: '33-dock-dark-published-nio', ...dockTall, theme: 'dark', seed: published({}, NIO), actions: [showPublished] },
+    // A hot-reloaded panel against the first release's host (DSH not fully restarted)
+    { name: '34-main-light-old-host-library', ...tall, theme: 'light', seed: ui({ place: 'library', libraryQuery: 'nio-aims-gw-int' }), host: 'old', actions: [openRecord('nio-aims-gw-int')] },
+    { name: '35-dock-dark-old-host-diagnose', ...dockTall, theme: 'dark', seed: ui(diagnose(`${NIO}/qsgw`), NIO), host: 'old' },
   ];
 }
 

@@ -133,7 +133,7 @@ export async function openPage(cdp, url, { width, height, actions = [] }) {
 }
 
 /** Query string for the preview harness (scripts/preview-server.mjs). */
-export function harnessQuery({ view = 'main', theme = 'light', seed = {}, dockWidth, session }) {
+export function harnessQuery({ view = 'main', theme = 'light', seed = {}, dockWidth, session, host }) {
   return new URLSearchParams({
     view,
     theme,
@@ -142,5 +142,7 @@ export function harnessQuery({ view = 'main', theme = 'light', seed = {}, dockWi
     ...(dockWidth ? { dockWidth: String(dockWidth) } : {}),
     // How the stand-in session service behaves (see the harness in preview-server.mjs).
     ...(session ? { session } : {}),
+    // `old` makes the harness answer like the first release's host (see preview-server.mjs).
+    ...(host ? { host } : {}),
   }).toString();
 }

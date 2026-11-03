@@ -76,6 +76,16 @@ function normalizeConfig(raw) {
 
 const API_PREFIX = '/abacusflow/api';
 
+/**
+ * What this host serves beyond the first release, announced by `/ping`. The panel compares it
+ * with what it needs (`HOST_FEATURES_NEEDED` in lib/client.js) and says so when the host is
+ * behind, instead of failing on a missing field or route.
+ *   asset-kind     `/library/assets` items carry kind/quantity/stem, and audits come apart
+ *   diagnose       `/diagnose`
+ *   library-band   `/library/band`
+ */
+const HOST_FEATURES = Object.freeze(['asset-kind', 'diagnose', 'library-band']);
+
 /** Session workspace cwd for a tool call, matching dsh-tool-fs.sessionCwd. */
 function workspaceOf(exec) {
   return exec?.agent?.session?.header?.cwd || process.cwd();
@@ -418,7 +428,9 @@ export function apply(ctx, rawConfig) {
   };
 
   route(`${API_PREFIX}/ping`, async (req, res, send) => {
-    send(200, { ok: true, version: '0.1.0', defaultScanRoot: cfg.defaultScanRoot });
+    // `features` lets the panel tell when the host is older than itself: DSH hot-reloads the
+    // client bundle, but this half keeps running until DSH is fully restarted.
+    send(200, { ok: true, version: '0.1.0', features: HOST_FEATURES, defaultScanRoot: cfg.defaultScanRoot });
   });
 
   route(`${API_PREFIX}/scan`, async (req, res, send) => {

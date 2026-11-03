@@ -44,6 +44,13 @@ window.__ModuleLoader__.load({
      */
     let pluginContext = null;
 
+    /**
+     * The host's `/ping` answer, kept where every pane can read it: which host features exist
+     * decides whether a pane asks the host or says why it cannot (`hostLag`). Set once per
+     * panel mount, before the state update that re-renders the panes.
+     */
+    let hostPing = null;
+
     // =====================================================================
     // styles
     // =====================================================================
@@ -462,6 +469,9 @@ window.__ModuleLoader__.load({
       .af-cmp-head .af-num { font: 600 12px/18px var(--af-mono); }
       .af-cmp-key { display: inline-block; min-width: 3.5em; margin-right: 6px; color: var(--af-fg-3); }
       .af-cmp-item .af-num { font: 600 12px/18px var(--af-mono); }
+
+      /* ---- the host is older than the panel (see hostLag) ---- */
+      .af-host-lag { flex: none; padding: var(--af-s2) var(--af-s3) 0; }
 
       /* ---- JSON outline (audits): one level at a time ---- */
       .af-json { display: flex; flex-direction: column; font: 400 12px/18px var(--af-mono); min-width: 0; }
@@ -1811,6 +1821,82 @@ window.__ModuleLoader__.load({
         }));
     }
 
+    // ----------------------------------------------------------- host version ---
+
+    /** What the panel needs from the host beyond the first release (`HOST_FEATURES` in lib/index.js). */
+    const HOST_FEATURES_NEEDED = ['asset-kind', 'diagnose', 'library-band'];
+    // Only what the reader loses is named: an older host's missing `asset-kind` is made up for
+    // in the panel (assetKindOf and friends), so it is not reported as unavailable.
+    const HOST_FEATURE_LABEL = { diagnose: '阶段诊断', 'library-band': '已发表能带对照' };
+
+    /**
+     * Whether the host is behind the panel.
+     *
+     * DSH hot-reloads this client bundle when the plugin's files change, but the host half keeps
+     * running the code it started with until DSH is fully restarted. So a new panel can meet an
+     * old host — which is how a database listing without `kind` reached `kind.toUpperCase()`
+     * and took the whole panel down. `/ping` lists the host's features; an older host lists none.
+     *
+     * @param {object|null} ping the `/ping` response; null when it has not answered
+     * @returns {{ known: boolean, missing: string[] }}
+     */
+    function hostLag(ping) {
+      if (!ping) return { known: false, missing: [] };
+      const have = new Set(Array.isArray(ping.features) ? ping.features : []);
+      return { known: true, missing: HOST_FEATURES_NEEDED.filter((f) => !have.has(f)) };
+    }
+
+    const ASSET_KINDS = new Set(['svg', 'png', 'jpg', 'pdf', 'json', 'dat', 'text']);
+    const QUANTITY_WORDS = { ks: 'KS', exx: 'EXX', gw: 'GW', g0w0: 'GW', gw0: 'GW', evgw: 'GW', qsgw: 'QSGW' };
+    const QUANTITY_ORDER = ['KS', 'EXX', 'GW', 'QSGW'];
+
+    /**
+     * An asset's kind: the host's when it says, else the same rule the host uses (the URL's
+     * extension, then the record path's). An older host sends no `kind`.
+     */
+    function assetKindOf(item) {
+      if (item && typeof item.kind === 'string' && item.kind) return item.kind;
+      const ext = (value) => {
+        if (typeof value !== 'string' || value === '') return '';
+        let pathname = value;
+        try {
+          pathname = new URL(value).pathname;
+        } catch {
+          /* a repository path, not a URL */
+        }
+        const m = /\.([a-z0-9]+)$/i.exec(pathname);
+        return m ? m[1].toLowerCase() : '';
+      };
+      const found = ext(item && item.url) || ext(item && item.path);
+      if (found === 'jpeg') return 'jpg';
+      if (found === 'txt' || found === 'out' || found === 'log') return 'text';
+      return ASSET_KINDS.has(found) ? found : 'other';
+    }
+
+    /** An asset's quantity: the host's when it says, else read from caption and file-name words. */
+    function assetQuantityOf(item) {
+      if (item && typeof item.quantity === 'string' && item.quantity) return item.quantity;
+      const fileName = item && typeof item.path === 'string' ? item.path.split('/').pop() : '';
+      const words = `${(item && item.label) || ''} ${fileName}`.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+      const found = new Set(words.map((w) => QUANTITY_WORDS[w]).filter(Boolean));
+      const list = QUANTITY_ORDER.filter((q) => found.has(q));
+      return list.length === 0 ? 'other' : list.length === 1 ? list[0] : 'compare';
+    }
+
+    /** An asset's file name without its extension: pairs a PNG with the PDF of the same plot. */
+    function assetStemOf(item) {
+      if (item && item.stem) return item.stem;
+      const name = item && typeof item.path === 'string' && item.path ? item.path.split('/').pop() : baseName(item && (item.url || item.label));
+      return String(name || '').replace(/\.[a-z0-9]+$/i, '') || null;
+    }
+
+    /** The spin channel in a band table's name (`GW_band_spin_1.dat`), or null. */
+    function assetSpinOf(item) {
+      if (item && Number.isFinite(item.spin)) return item.spin;
+      const m = /(?:^|[^a-z])spin_?(\d+)/i.exec(`${(item && item.path) || ''} ${(item && item.label) || ''}`);
+      return m ? Number(m[1]) : null;
+    }
+
     // ------------------------------------------------------- database figures ---
 
     const FIGURE_TABS = [
@@ -1840,7 +1926,10 @@ window.__ModuleLoader__.load({
      */
     function groupFigures(figures) {
       const byTab = new Map();
-      for (const item of figures || []) {
+      for (const raw of figures || []) {
+        // An older host sends neither kind, quantity nor stem; derive them by the host's rules
+        // rather than assume them (see hostLag).
+        const item = { ...raw, kind: assetKindOf(raw), quantity: assetQuantityOf(raw), stem: assetStemOf(raw), label: raw.label || '' };
         const key = FIGURE_TABS.some(([k]) => k === item.quantity) ? item.quantity : 'other';
         if (!byTab.has(key)) byTab.set(key, new Map());
         const cards = byTab.get(key);
@@ -4141,13 +4230,17 @@ window.__ModuleLoader__.load({
     function PublishedBandCompare(props) {
       const { record, focusL, iteration, narrow } = props;
       const assets = useApi(`assets:${record.id}`, () => api(`/library/assets?id=${encodeURIComponent(record.id)}`));
-      const bandData = assets.data && assets.data.ok ? (assets.data.bandData || []).filter((b) => b.url) : [];
+      const bandData = assets.data && assets.data.ok
+        ? (assets.data.bandData || []).filter((b) => b.url).map((b) => ({ ...b, quantity: assetQuantityOf(b), spin: assetSpinOf(b) }))
+        : [];
       const [pickUrl, setPickUrl] = useState(null);
       const item = bandData.find((b) => b.url === pickUrl) || bandData.find((b) => b.quantity === 'GW') || bandData[0] || null;
       const localKind = item ? { KS: 'KS', EXX: 'EXX', GW: 'QSGW', QSGW: 'QSGW' }[item.quantity] || null : null;
       const spin = item && item.spin ? item.spin : 1;
       const localIter = localKind === 'QSGW' && iteration !== null && iteration !== undefined ? iteration : null;
-      const published = useApi(item ? `pubband:${record.id}:${item.url}` : null, () =>
+      // `/library/band` is newer than the first host; an older host is not asked (see hostLag).
+      const hostLacksBand = hostLag(hostPing).missing.includes('library-band');
+      const published = useApi(item && !hostLacksBand ? `pubband:${record.id}:${item.url}` : null, () =>
         api(`/library/band?id=${encodeURIComponent(record.id)}&url=${encodeURIComponent(item.url)}`));
       const requests = focusL && localKind ? [{ id: 'local', taskId: focusL.id, only: `${localKind}:${spin}`, iteration: localIter }] : [];
       const loaded = useBandRequests(requests);
@@ -4156,6 +4249,9 @@ window.__ModuleLoader__.load({
 
       if (assets.loading) return h(Loading, null, '读取记录的能带文件清单…');
       if (bandData.length === 0) return h('div', { className: 'af-hint' }, '这条记录没有上传能带数据表，只能对照数值。');
+      if (hostLacksBand || (published.error && /^404\b/.test(published.error))) {
+        return h(Note, { tone: 'warn' }, '能带对照需要新版的插件宿主：DSH 的后台进程还在运行更新前的代码。完全退出 DSH（任务栏或托盘里的也要退出）再打开后可用。');
+      }
 
       const pub = published.data && published.data.ok ? published.data : null;
       const localData = loaded.local && loaded.local.data;
@@ -4379,7 +4475,12 @@ window.__ModuleLoader__.load({
      */
     function DiagnosisPane(props) {
       const { stage, state, run, onHandoff } = props;
-      const diag = useApi(`diag:${stage.id}:${cacheGeneration}`, () => api(`/diagnose?id=${encodeURIComponent(stage.id)}`));
+      // `/diagnose` is newer than the first host; an older host is not asked (see hostLag).
+      const hostLacks = hostLag(hostPing).missing.includes('diagnose');
+      const diag = useApi(hostLacks ? null : `diag:${stage.id}:${cacheGeneration}`, () => api(`/diagnose?id=${encodeURIComponent(stage.id)}`));
+      if (hostLacks || (diag.error && /^404\b/.test(diag.error))) {
+        return h(Note, { tone: 'warn' }, '诊断需要新版的插件宿主：DSH 的后台进程还在运行更新前的代码。完全退出 DSH（任务栏或托盘里的也要退出）再打开后可用。');
+      }
       if (diag.loading) return h(Loading, null, '读取日志与输出，诊断这个阶段…');
       if (diag.error) return h(Note, { tone: 'err' }, `诊断失败：${diag.error}`);
       const d = diag.data;
@@ -5131,9 +5232,12 @@ window.__ModuleLoader__.load({
         return h(Note, { tone: 'warn' }, `数据库资产不可用：${(data && data.error) || '未配置'}`);
       }
 
-      const audits = data.audits || [];
+      // An older host lists audit JSON among the figures and sends no `audits`: split it here.
+      const listed = data.figures || [];
+      const audits = Array.isArray(data.audits) ? data.audits : listed.filter((f) => assetKindOf(f) === 'json');
+      const plots = Array.isArray(data.audits) ? listed : listed.filter((f) => assetKindOf(f) !== 'json');
       const bandData = data.bandData || [];
-      const { tabs, defaultKey } = groupFigures(data.figures || []);
+      const { tabs, defaultKey } = groupFigures(plots);
       const active = tabs.find((t) => t.key === tab) || tabs.find((t) => t.key === defaultKey) || null;
 
       return h(
@@ -5171,7 +5275,7 @@ window.__ModuleLoader__.load({
                 bandData.map((item) =>
                   h('div', { key: item.url || item.label, className: 'af-lib-row' },
                     h('span', { className: 'af-lib-row-label' }, item.label),
-                    h('span', { className: 'af-kind' }, `${item.quantity}${item.spin ? ` · 自旋 ${item.spin}` : ''}`),
+                    h('span', { className: 'af-kind' }, `${assetQuantityOf(item)}${assetSpinOf(item) ? ` · 自旋 ${assetSpinOf(item)}` : ''}`),
                     item.sizeBytes ? h('span', { className: 'af-kind' }, fmtBytes(item.sizeBytes)) : null,
                     h(ExternalLink, { url: item.url }, '原文件')))))
           : null,
@@ -5211,10 +5315,10 @@ window.__ModuleLoader__.load({
         frame,
         h('figcaption', { className: 'af-lib-cap' },
           h('span', { className: 'af-lib-cap-text' }, card.caption),
-          h('span', { className: 'af-kind' }, kinds.map((k) => k.toUpperCase()).join(' + ')),
+          h('span', { className: 'af-kind' }, kinds.map((k) => String(k).toUpperCase()).join(' + ')),
           card.pdf ? h(ExternalLink, { url: card.pdf.url }, 'PDF') : null,
           image ? h(ExternalLink, { url: image.url }, '原图') : null,
-          card.files.map((f) => h(ExternalLink, { key: f.url || f.label, url: f.url }, f.kind.toUpperCase()))));
+          card.files.map((f) => h(ExternalLink, { key: f.url || f.label, url: f.url }, String(f.kind || '文件').toUpperCase()))));
     }
 
     /** An audit JSON: caption and size; its outline is fetched only when asked for. */
@@ -5896,6 +6000,21 @@ window.__ModuleLoader__.load({
       }, [scan]);
     }
 
+    /**
+     * Said once, at the top, when the host is older than this panel (`hostLag`): what is
+     * unavailable, and the one thing that fixes it. The panes that need a missing feature say
+     * so again where the reader looks for them.
+     */
+    function HostLagBanner(props) {
+      const lag = hostLag(props.ping);
+      const lost = lag.missing.filter((f) => HOST_FEATURE_LABEL[f]);
+      if (!lag.known || lost.length === 0) return null;
+      return h('div', { className: 'af-host-lag' },
+        h(Note, { tone: 'warn' },
+          `插件已更新，但 DSH 的后台宿主还在运行更新前的代码（暂不可用：${lost.map((f) => HOST_FEATURE_LABEL[f]).join('、')}）。`
+          + '请完全退出 DSH——只关窗口不够，任务栏或托盘里的 DSH 也要退出——再重新打开。'));
+    }
+
     function Panel(props) {
       const sessionLink = props.sessionLink || null;
       const [rootRef, width] = useWidth(props.compact ? 400 : 1100);
@@ -5908,6 +6027,8 @@ window.__ModuleLoader__.load({
        */
       const [pinnedRoot, setPinnedRoot] = useState(readStoredRoot());
       const [serverDefault, setServerDefault] = useState('');
+      // The host's `/ping`; null until it answers. Drives the "host is behind" banner.
+      const [hostInfo, setHostInfo] = useState(hostPing);
       const [scan, setScan] = useState(null);
       const [scanning, setScanning] = useState(false);
       const [scanError, setScanError] = useState(null);
@@ -5958,6 +6079,8 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         api('/ping')
           .then((info) => {
+            hostPing = info || {};
+            setHostInfo(hostPing);
             const configured = (info && info.defaultScanRoot) || '';
             setServerDefault(configured);
             const pinned = readStoredRoot();
@@ -6164,6 +6287,7 @@ window.__ModuleLoader__.load({
         'div',
         { className: 'af-root', ref: rootRef, 'data-narrow': narrow ? 'true' : undefined },
         toolbar,
+        h(HostLagBanner, { ping: hostInfo }),
         narrow
           ? h(
               'div',

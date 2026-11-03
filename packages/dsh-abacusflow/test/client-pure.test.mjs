@@ -31,6 +31,7 @@ const EXPORTS = [
   'mainViewSessionId', 'describeSessionLink', 'describeRemoteError', 'submissionStep', 'submissionLabel', 'postToSession',
   'groupFigures', 'jsonOutline', 'fmtBytes', 'buildDiagnosisMessage', 'DIAGNOSIS_GLYPH',
   'methodFamily', 'recordSpinFacts', 'localCompareFacts', 'compareWithRecord', 'gapComparison', 'baseName',
+  'hostLag', 'HOST_FEATURES_NEEDED', 'assetKindOf', 'assetQuantityOf', 'assetStemOf', 'assetSpinOf',
 ];
 // Wrapped in a function and run in this context, so arrays and objects share this realm's
 // prototypes (deepStrictEqual compares them) and nothing leaks into the global scope.
@@ -735,4 +736,54 @@ test('method families are read conservatively', () => {
   assert.deepEqual(P.recordSpinFacts('collinear spin-polarized antiferromagnetic'), { nspin: 2, soc: null });
   assert.deepEqual(P.recordSpinFacts('non-spin-polarized, without SOC'), { nspin: 1, soc: false });
   assert.equal(P.baseName('../assets/basis/DZP/Ni_gga_8au_100Ry_4s2p2d1f.orb'), 'Ni_gga_8au_100Ry_4s2p2d1f.orb');
+});
+
+// ------------------------------------------------- a host older than the panel ---
+//
+// DSH hot-reloads the client bundle but keeps the host half running until it is fully
+// restarted. The user's DSH did exactly that: the new panel met the first release's host,
+// whose /library/assets items carry no kind/quantity/stem — and `kind.toUpperCase()` took the
+// whole panel down. This is that response, verbatim in shape.
+const OLD_HOST_NIO = [
+  { label: 'EXX occupation-separated frontier', role: 'figures', url: 'https://huggingface.co/datasets/AroundPeking/LibRPA-database/resolve/339cc46/data/calculations/3d/NiO/nio-aims-gw-int/figures/exx_frontier.svg', sizeBytes: 23996, path: 'data/calculations/3d/NiO/nio-aims-gw-int/figures/exx_frontier.svg', sha256: null },
+  { label: 'GW occupation-separated frontier', role: 'figures', url: 'https://huggingface.co/datasets/AroundPeking/LibRPA-database/resolve/339cc46/data/calculations/3d/NiO/nio-aims-gw-int/figures/gw_frontier.svg', sizeBytes: 22416, path: 'data/calculations/3d/NiO/nio-aims-gw-int/figures/gw_frontier.svg', sha256: null },
+  { label: 'Frontier display mappings, raw audit and provenance', role: 'figures', url: 'https://huggingface.co/datasets/AroundPeking/LibRPA-database/resolve/339cc46/data/calculations/3d/NiO/nio-aims-gw-int/figures/band_frontier_metadata.json', sizeBytes: 225596, path: 'data/calculations/3d/NiO/nio-aims-gw-int/figures/band_frontier_metadata.json', sha256: null },
+];
+
+test('an older host\'s listing still groups by quantity, with kinds read from the URL', () => {
+  const plots = OLD_HOST_NIO.filter((f) => P.assetKindOf(f) !== 'json');
+  assert.equal(plots.length, 2, 'the audit JSON is told apart without the host saying so');
+  const { tabs, defaultKey } = P.groupFigures(plots);
+  assert.deepEqual(tabs.map((t) => t.key), ['EXX', 'GW']);
+  assert.equal(defaultKey, 'GW');
+  assert.equal(tabs[1].cards[0].image.kind, 'svg');
+  assert.equal(tabs[1].cards[0].key, 'gw_frontier');
+  // Even an item of an unrecognised kind gets a string kind, so nothing calls a method on undefined.
+  const odd = P.groupFigures([{ label: 'notes', url: 'https://huggingface.co/x/notes' }]);
+  assert.equal(odd.tabs[0].cards[0].files[0].kind, 'other');
+});
+
+test('asset kind, quantity, stem and spin follow the host\'s rules when the host is silent', () => {
+  assert.equal(P.assetKindOf({ url: 'https://huggingface.co/a/b/cuinp2se6_ks.png?download=1' }), 'png');
+  assert.equal(P.assetKindOf({ url: null, path: 'x/results/GW_band_spin_1.dat' }), 'dat');
+  assert.equal(P.assetKindOf({ kind: 'svg', url: 'https://huggingface.co/a.png' }), 'svg', 'the host\'s word wins');
+  assert.equal(P.assetQuantityOf({ label: 'cuinp2se6_ks.png', path: 'data/calculations/2d/C/cuinp2se6-table-gw/figures/cuinp2se6_ks.png' }), 'KS');
+  assert.equal(P.assetQuantityOf({ label: 'KS / EXX / GW band comparison' }), 'compare');
+  assert.equal(P.assetStemOf({ path: 'x/figures/cuinp2se6_gw.pdf' }), 'cuinp2se6_gw');
+  assert.equal(P.assetSpinOf({ label: 'GW_band_spin_2.dat' }), 2);
+  assert.equal(P.assetSpinOf({ label: 'cuinp2se6_GW.dat' }), null);
+});
+
+test('the panel knows when the host is behind, and names what is missing', () => {
+  assert.deepEqual(P.hostLag(null), { known: false, missing: [] }, 'no answer yet: nothing claimed');
+  assert.deepEqual(P.hostLag({ ok: true, version: '0.1.0' }).missing, ['asset-kind', 'diagnose', 'library-band'], 'the first release lists no features');
+  assert.deepEqual(P.hostLag({ ok: true, features: [...P.HOST_FEATURES_NEEDED] }).missing, []);
+});
+
+test('the host announces every feature the panel needs', () => {
+  const host = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
+  const m = /const HOST_FEATURES = Object\.freeze\(\[([^\]]*)\]\)/.exec(host);
+  assert.ok(m, 'HOST_FEATURES declared in lib/index.js');
+  const announced = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  assert.deepEqual(P.hostLag({ features: announced }).missing, [], `host announces ${announced.join(', ')}`);
 });

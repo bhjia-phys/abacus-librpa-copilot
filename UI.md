@@ -331,6 +331,7 @@ Screenshots (`screenshots/`, all from real data, 0 console errors):
 | `22` – `25` 数据库 | NiO SVG figures + audit outline; CuInP2Se6 PNG + PDF (dark); Bi2Se3 SVG tabs in the dock; a record with no figures (dock, dark) |
 | `26` – `29` ask box | delivered (main light, dock dark); no conversation open — reason + 复制 (main dark); refused by the host (dock light) |
 | `30` – `33` 与已发表记录对照 | Bi2Se3 vs `bi2se3-abacus-gw-dzp` — same 101-point path, so one axis (main light, dock light); NiO vs `nio-aims-gw-int` — 364 vs 126 points, side by side (main dark, dock dark) |
+| `34` / `35` older host | the panel against the first release's host (`?host=old`, §13.3): database still works, with the banner (main light); 诊断 says it needs the new host (dock dark) |
 
 ## 11. Deliberately left for later
 
@@ -490,6 +491,26 @@ The `textarea:not(.af-textarea)` fallback is removed: on the main page it could 
 wrong textarea. Verified with `scripts/check-ask-box.mjs` against a stand-in that mirrors DSH's
 controller (12/12: main and dock × delivered / queued / refused / withdrawn late / no
 conversation / no service). **Not verified in a live DSH session** — see §12 item 2.
+
+### 13.3 A panel newer than its host — found in live use, fixed
+
+DSH hot-reloads the plugin's **client** bundle when its files change (`dsh-client-hmr`), but
+the **host** half keeps running the code it started with until DSH is fully quit. In the user's
+DSH the reloaded panel met the first release's host: its `/library/assets` items carry no
+`kind`, so `f.kind.toUpperCase()` threw and the error boundary replaced the whole panel
+(「Cannot read properties of undefined (reading 'toUpperCase')」). Confirmed on the running host
+(`dsh-desktop-host`, started before the change): no `kind` in the listing, `/diagnose` → 404.
+
+- `/ping` now announces `features` (`HOST_FEATURES` in `lib/index.js`); the panel compares them
+  with `HOST_FEATURES_NEEDED` (`hostLag`). A test keeps the two lists in step.
+- The database view no longer needs the new fields: `assetKindOf` / `assetQuantityOf` /
+  `assetStemOf` / `assetSpinOf` apply the host's rules when the host is silent, and audit JSON
+  is split from the figures in the panel when the host does not do it.
+- With an older host, a banner names what is unavailable (阶段诊断, 已发表能带对照) and the one
+  fix — quit DSH completely (window, taskbar and tray) and reopen; the 诊断 tab and the band part
+  of 与已发表记录对照 say the same where they would have shown data.
+- The preview harness can impersonate that host (`?host=old`); screenshots `34` (database, main,
+  light) and `35` (诊断, dock, dark) show the panel against it.
 
 ## 14. Per-stage diagnosis (诊断)
 
