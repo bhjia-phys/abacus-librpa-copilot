@@ -1,0 +1,17 @@
+                              ABACUS v3.9.0.25
+
+ --> #ION MOVE#         1  #ELEC ITER#         1
+ Electron density deviation 0.902114
+  E_KohnSham     -2.1000000000        -28.5720000000
+ --> #ION MOVE#         1  #ELEC ITER#         2
+ Electron density deviation 0.401228
+  E_KohnSham     -2.1800000000        -29.6604000000
+ --> #ION MOVE#         1  #ELEC ITER#        50
+ Electron density deviation 0.003100
+  E_KohnSham     -2.2000000000        -29.9325250000
+  E_Fermi        -0.2900000000        -3.9456500000
+  E_gap(k)       1.0000000000         13.6056931229
+
+ !!SCF IS NOT CONVERGED!!
+
+  Total  Time  : 0 h 2 mins 11 secs

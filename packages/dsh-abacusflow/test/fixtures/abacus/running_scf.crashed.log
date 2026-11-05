@@ -1,0 +1,12 @@
+                              ABACUS v3.9.0.25
+
+ RELAX STEP: 1
+ --> #ION MOVE#         1  #ELEC ITER#         1
+ Electron density deviation 0.439953
+  E_KohnSham     -2.3121239863        -31.4580606961
+ --> #ION MOVE#         1  #ELEC ITER#         2
+ Electron density deviation 0.200000
+  E_KohnSham     -2.3150000000        -31.4970000000
+ --> #ION MOVE#         2  #ELEC ITER#         1
+ Electron density deviation 0.188000
+  E_KohnSham     -2.3155000000        -31.5038000000

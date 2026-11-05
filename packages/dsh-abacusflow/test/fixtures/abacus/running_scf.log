@@ -1,0 +1,60 @@
+                              ABACUS v3.9.0.25
+ RELAX STEP: 1
+ --> #ION MOVE#         1  #ELEC ITER#         1
+ Electron density deviation 0.439953
+  E_KohnSham     -2.3121239863        -31.4580606961
+ --> #ION MOVE#         1  #ELEC ITER#         2
+ Electron density deviation 0.091088
+ ----------------------------------------------------------
+      Energy           Rydberg                 eV
+ ----------------------------------------------------------
+  E_KohnSham     -2.3185679050        -31.5457347082
+  E_Harris       -2.2417731465        -30.5008884153
+  E_Fermi        -0.0996402683        -1.3556753991
+  E_gap(k)       1.1343484616         15.4336025957
+ ----------------------------------------------------------
+ #SCF IS CONVERGED#
+ #TOTAL ENERGY# -31.5457347082 eV
+ #TOTAL-FORCE (eV/Angstrom)#
+     Atoms          Force_x           Force_y           Force_z
+    Si1       0.0000000000       0.0000000000       0.1500000000
+    Si2       0.0000000000       0.0000000000      -0.1500000000
+ RELAX STEP: 2
+ --> #ION MOVE#         2  #ELEC ITER#         1
+ Electron density deviation 0.301552
+  E_KohnSham     -2.3120042915        -31.4576361839
+ --> #ION MOVE#         2  #ELEC ITER#         2
+ Electron density deviation 0.0302210
+  E_KohnSham     -2.3189017733        -31.5502829021
+  E_Fermi        -0.0614021133        -0.8353991120
+  E_gap(k)       1.1170205113         15.1978790427
+ #SCF IS CONVERGED#
+ #TOTAL ENERGY# -31.5502829021 eV
+ #TOTAL-FORCE (eV/Angstrom)#
+    Si1       0.0000000000       0.0000000000       0.0400000000
+    Si2       0.0000000000       0.0000000000      -0.0400000000
+ RELAX STEP: 3
+ --> #ION MOVE#         3  #ELEC ITER#         1
+ Electron density deviation 0.210000
+  E_KohnSham     -2.3180000000        -31.5380000000
+ --> #ION MOVE#         3  #ELEC ITER#         2
+ Electron density deviation 0.0091120
+  E_KohnSham     -2.3190488233        -31.5522779370
+  E_Fermi        -0.0526962279        -0.7169689620
+  E_gap(k)       1.1177390820         15.2076203924
+ #SCF IS CONVERGED#
+ #TOTAL ENERGY# -31.552277937 eV
+ #TOTAL-FORCE (eV/Angstrom)#
+    Si1       0.0000000000       0.0000000000       0.0001234567
+    Si2       0.0000000000       0.0000000000      -0.0001234567
+
+ TIME STATISTICS
+------------------------------------------------------------------
+   CLASS_NAME           NAME        TIME/s  CALLS   AVG/s  PER/%
+------------------------------------------------------------------
+                 total              0.41   13       0.03   100.00
+ Driver          atomic_world       0.41   1        0.41   100.00
+------------------------------------------------------------------
+ NAME-------------------------|MEMORY(MB)------------------
+                         total          7.605
+  Total  Time  : 0 h 3 mins 37 secs

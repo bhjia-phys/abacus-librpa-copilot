@@ -24,5 +24,9 @@ local-config.json
 # Generic
 node_modules/
 *.log
+# …but test fixtures that happen to be logs are source, not output. Without this exception a
+# fresh clone cannot run the suite: 11 of the log-parser tests fail on a missing
+# `test/fixtures/abacus/running_scf.log`.
+!packages/*/test/fixtures/**/*.log
 .DS_Store
 Thumbs.db

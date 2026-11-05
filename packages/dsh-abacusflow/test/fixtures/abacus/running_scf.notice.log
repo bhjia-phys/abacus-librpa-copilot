@@ -1,0 +1,12 @@
+                                  ABACUS v3.9.0.25
+
+ --> #ION MOVE#         1  #ELEC ITER#         1
+ Electron density deviation 0.439953
+  E_KohnSham     -2.3121239863        -31.4580606961
+
+ ------------------------------------------------------------------------
+                          !NOTICE!
+
+  Can't find pseudopotential file: missing.UPF
+  CHECK IN FILE : OUT.ABACUS/warning.log
+ ------------------------------------------------------------------------
